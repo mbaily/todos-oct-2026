@@ -109,6 +109,12 @@ export async function mutate(action, id, fields) {
     const changed = applyMutation(entities, mutation, mutation.timestamp);
     tx.objectStore('outbox').add(mutation);
     changed.forEach(entity => store.put(entity));
+    if (action === 'move-items') {
+      return { action, opId: mutation.opId, id: fields.destinationId, fields: {
+        destinationId: id, itemIds: fields.itemIds,
+        ...(fields.newListName === undefined ? {} : { removeSourceCreatedBy: mutation.opId }),
+      } };
+    }
     if (action === 'trash') return { action: 'restore', id, fields: { trashOpId: mutation.opId } };
     if (Object.keys(oldFields).length) return { action: 'update', id, fields: oldFields };
     return null;

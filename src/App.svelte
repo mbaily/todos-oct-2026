@@ -7,6 +7,7 @@
   import { incompleteTodoCounts } from './lib/todo-counts.js';
   import { recordUndo as appendUndo } from './lib/undo.js';
   import { mutate, readEntitySnapshot, readRootSortOrder, readRootDateDisplay, readSyncErrors, dismissSyncErrors } from './lib/db.js';
+  import { newId } from './lib/id.js';
   import EntityRow from './EntityRow.svelte';
   import CreationForm from './CreationForm.svelte';
   import FavouriteRow from './FavouriteRow.svelte';
@@ -15,6 +16,7 @@
   import ListTodoCount from './ListTodoCount.svelte';
   import NearbyErrands from './NearbyErrands.svelte';
   import LocationsManager from './LocationsManager.svelte';
+  import MoveItemsDialog from './MoveItemsDialog.svelte';
   import ServiceWorkerStatus from './ServiceWorkerStatus.svelte';
 
   const initialView = parseViewHash(location.hash);
@@ -47,6 +49,10 @@
   let undoing = $state(false);
   let pendingDrafts = $state.raw(new Set());
   let activePanelId = $state(null);
+  let listActionsOpen = $state(false);
+  let listActionsButton = $state();
+  let moveSourceId = $state(null);
+  let moveNotice = $state(null);
   let worker;
   let channel;
   let refreshVersion = 0;
@@ -68,6 +74,10 @@
   const showingSettings = $derived(pageKind === 'settings');
   const specialView = $derived(showingHashtags || showingTrash || showingNearby || showingLocations || showingSettings);
   const searching = $derived(search.trim().length > 0);
+  const inList = $derived(!specialView && !searching && current?.type === 'list');
+  const moveLists = $derived(moveSourceId
+    ? entities.filter(entity => entity.type === 'list' && entity.parentId === current?.parentId)
+    : []);
   const contextKey = $derived(`${pageKind}:${currentId ?? 'root'}:${searching}`);
   const favourites = $derived(entities.filter(entity => entity.favourite)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id)));
@@ -115,8 +125,45 @@
       panelContext = contextKey;
       ++panelVersion;
       activePanelId = null;
+      listActionsOpen = false;
     }
   });
+
+  $effect(() => {
+    if (moveSourceId && (!inList || moveSourceId !== currentId)) moveSourceId = null;
+  });
+
+  async function openMoveItems() {
+    const sourceId = currentId;
+    listActionsOpen = false;
+    try {
+      await flushEditors();
+      if (inList && currentId === sourceId) moveSourceId = sourceId;
+    } catch (problem) { showError(problem); }
+  }
+
+  async function closeMoveItems() {
+    moveSourceId = null;
+    await tick();
+    listActionsButton?.focus();
+  }
+
+  async function moveItems(itemIds, destination, name) {
+    const sourceId = moveSourceId;
+    const destinationId = destination?.id ?? newId();
+    const { opId } = await save('move-items', sourceId, {
+      destinationId, itemIds, ...(destination ? {} : { newListName: name }),
+    });
+    if (!syncErrors.some(failure => failure.id === opId)) {
+      moveNotice = { sourceId, destinationId, name: destination?.name ?? name, count: itemIds.length, opId };
+    }
+  }
+
+  function openMoveDestination() {
+    const { destinationId } = moveNotice;
+    moveNotice = null;
+    return navigate(destinationId);
+  }
 
   async function activatePanel(id, toggle = false) {
     const version = ++panelVersion;
@@ -148,10 +195,13 @@
 
   async function save(action, id, fields, recordUndo = true, undoGroup = null) {
     const result = await mutate(action, id, fields);
-    if (recordUndo) undoHistory = appendUndo(undoHistory, result.inverse, undoGroup);
+    if (recordUndo && !syncErrors.some(failure => failure.id === result.inverse?.opId)) {
+      undoHistory = appendUndo(undoHistory, result.inverse, undoGroup);
+    }
     error = '';
     channel?.postMessage({ type: 'mutation' });
     await refresh();
+    return result;
   }
 
   async function toggleSort() {
@@ -221,6 +271,9 @@
       if (!(hadDraft && entry === previousUndo) && entry) {
         const { action, id, fields } = entry;
         await save(action, id, fields, false);
+        if (action === 'move-items' && moveNotice?.destinationId === id && moveNotice.sourceId === fields.destinationId) {
+          moveNotice = null;
+        }
         // A concurrent save must not be discarded along with the undone step.
         undoHistory = undoHistory.filter(item => item !== entry);
       }
@@ -422,6 +475,11 @@
     const failures = await readSyncErrors();
     if (disposed || version !== syncErrorsVersion) return;
     syncErrors = failures;
+    if (failures.length) {
+      const rejected = new Set(failures.map(failure => failure.id));
+      undoHistory = undoHistory.filter(entry => !rejected.has(entry.opId));
+      if (moveNotice && rejected.has(moveNotice.opId)) moveNotice = null;
+    }
   }
 
   async function dismissErrors() {
@@ -536,11 +594,28 @@
     <button type="button" id="sort-order" title="Change sort order" tabindex="-1" disabled={!ready || sorting} onclick={toggleSort}>{activeSort.label}</button>
   {/if}
   {#if !specialView || showingNearby}
-    <button type="button" class="icon-button" aria-label="Undo" title={`Undo last edit or delete (${undoHistory.length} saved step${undoHistory.length === 1 ? '' : 's'} available)`} disabled={undoing || (!undoHistory.length && !pendingDrafts.size)} onclick={undo}>↶</button>
+    <button type="button" class="icon-button" aria-label="Undo" title={`Undo last ${undoHistory.at(-1)?.action === 'move-items' ? 'move' : 'edit or delete'} (${undoHistory.length} saved step${undoHistory.length === 1 ? '' : 's'} available)`} disabled={undoing || (!undoHistory.length && !pendingDrafts.size)} onclick={undo}>↶</button>
+  {/if}
+  {#if inList}
+    {#key current.id}
+      <details class="list-actions" bind:open={listActionsOpen}>
+        <summary aria-label="List actions" title="List actions" bind:this={listActionsButton}>⋯</summary>
+        <div class="list-actions-panel">
+          <button type="button" onclick={openMoveItems} disabled={!items.length}>Move items to next day / list</button>
+        </div>
+      </details>
+    {/key}
   {/if}
   {#if !showingLocations && !showingSettings}<button type="button" id="date-display" title="Change date display" tabindex="-1" disabled={!ready || settingDates} onclick={toggleDateDisplay}>{activeDateDisplay.label}</button>{/if}
 </div>
 <main id="contents" aria-label={showingTrash ? 'Trash' : showingHashtags ? 'Hashtags' : showingNearby ? 'Nearby errands' : showingLocations ? 'Edit locations' : showingSettings ? 'Settings' : 'Items'} hidden={!ready}>
+  {#if inList && moveNotice?.sourceId === currentId && entities.some(entity => entity.id === moveNotice.destinationId)}
+    <aside class="pill-row">
+      <output>Moved {moveNotice.count} {moveNotice.count === 1 ? 'item' : 'items'} to “{moveNotice.name}”.</output>
+      <button type="button" onclick={openMoveDestination}>Open list</button>
+      <button type="button" class="icon-button" aria-label="Dismiss move confirmation" onclick={() => moveNotice = null}>×</button>
+    </aside>
+  {/if}
   {#if waitingForLinkedItem}
     <p role="status">Waiting to sync the linked item…</p>
   {:else if showingSettings}
@@ -577,8 +652,39 @@
     {/key}
   {/if}
 </main>
+{#if inList && moveSourceId === currentId}
+  <MoveItemsDialog source={current} {items} lists={moveLists} onmove={moveItems} onclose={closeMoveItems} />
+{/if}
 <div id="sync-errors" role="alert" hidden={!syncErrors.length}>
   <span id="sync-error-text">{syncErrors.length ? `Some changes could not be accepted: ${syncErrors.map(error => error.message).join(' ')}` : ''}</span>
   <button id="dismiss-errors" type="button" onclick={dismissErrors}>Dismiss</button>
 </div>
 <div id="error" role="alert" hidden={!error}>{error}</div>
+
+<style>
+  .list-actions { display: inline-block; position: relative; vertical-align: middle; }
+  .list-actions summary {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    line-height: 1;
+    cursor: pointer;
+    list-style: none;
+  }
+  .list-actions summary::-webkit-details-marker { display: none; }
+  .list-actions-panel {
+    position: absolute;
+    inset-inline-start: 0;
+    z-index: 2;
+    width: max-content;
+    background: var(--page-background);
+  }
+  .list-actions-panel button { padding: 0.35rem; }
+  @media (max-width: 440px) {
+    .list-actions-panel { inset-inline-start: auto; inset-inline-end: -2.5rem; }
+  }
+  @media (pointer: coarse) {
+    .list-actions summary { width: 48px; height: 48px; font-size: 1.5rem; }
+  }
+</style>

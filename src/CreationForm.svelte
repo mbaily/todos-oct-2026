@@ -2,6 +2,7 @@
   import { onMount, tick, untrack } from 'svelte';
   import { childTypes } from './lib/model.js';
   import { newId } from './lib/id.js';
+  import { formatListDate } from './lib/dates.js';
   import { acceptOnEnter } from './lib/enter.js';
   import HashtagSuggestions from './HashtagSuggestions.svelte';
 
@@ -49,8 +50,7 @@
 
   async function addDatedList() {
     if (saving || parent?.type !== 'folder') return;
-    const today = new Date();
-    const name = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+    const name = formatListDate(new Date());
     saving = true;
     try {
       await save('create', newId(), {

@@ -2253,6 +2253,101 @@ test.describe('hashtag completion', () => {
   });
 });
 
+test('the list menu moves items offline and Undo returns them as a group', async ({ page, context, request }) => {
+  const [book, folder, source, target, todo, done, note] = Array.from({ length: 7 }, () => crypto.randomUUID());
+  const create = (id, type, parentId, fields) => ({
+    opId: crypto.randomUUID(), action: 'create', id, fields: { type, parentId, ...fields },
+  });
+  const seeded = await request.post('/api/sync', { data: { cursor: 0, mutations: [
+    create(book, 'notebook', null, { name: 'Rollover notebook' }),
+    create(folder, 'folder', book, { name: 'Rollover folder' }),
+    create(source, 'list', folder, { name: 'Work 20/11/2026 #office' }),
+    create(target, 'list', folder, { name: 'Work 23/11/2026 #office' }),
+    create(todo, 'todo', source, { text: 'Open todo' }),
+    create(done, 'todo', source, { text: 'Completed todo', checked: true }),
+    create(note, 'note', source, { text: 'Keep this note' }),
+  ] } });
+  expect((await seeded.json()).acknowledgements.every(receipt => receipt.accepted)).toBe(true);
+
+  const sourceUrl = `/#entity/${source}`;
+  await page.goto(sourceUrl);
+  const undo = page.getByRole('button', { name: 'Undo', exact: true });
+  const openDialog = async () => {
+    await page.getByLabel('List actions', { exact: true }).click();
+    await page.getByRole('button', { name: 'Move items to next day / list', exact: true }).click();
+    return page.getByRole('dialog', { name: 'Move items to next day / list' });
+  };
+  const contents = page.locator('#contents');
+  await expect(contents).toContainText('Open todo');
+  await sync(page);
+  await context.setOffline(true);
+  const dialog = await openDialog();
+  const destination = dialog.getByRole('textbox', { name: 'Destination list' });
+  await expect(destination).toHaveValue('Work 21/11/2026 #office');
+  await dialog.getByRole('button', { name: '+2 days', exact: true }).click();
+  await expect(destination).toHaveValue('Work 22/11/2026 #office');
+  await dialog.getByRole('button', { name: 'Pick a date', exact: true }).click();
+  await dialog.getByLabel('Move date', { exact: true }).fill('2026-12-31');
+  await expect(destination).toHaveValue('Work 31/12/2026 #office');
+  await dialog.getByRole('button', { name: '+1 day', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Create list and move 1 item', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page).toHaveURL(sourceUrl);
+  await expect(contents).not.toContainText('Open todo');
+  await expect(contents).toContainText('Completed todo');
+  await expect(contents).toContainText('Keep this note');
+  const tomorrow = (await localEntity(page, todo)).parentId;
+  expect(await localEntity(page, tomorrow)).toMatchObject({ name: 'Work 21/11/2026 #office', parentId: folder });
+
+  await openDialog();
+  await expect(dialog.getByRole('button', { name: 'Incomplete (0)', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(dialog.getByRole('button', { name: 'Move 0 items', exact: true })).toBeDisabled();
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await undo.click();
+  await expect(contents).toContainText('Open todo');
+  expect(await localEntity(page, tomorrow)).toHaveProperty('deletedAt', expect.any(String));
+
+  await openDialog();
+  await dialog.getByRole('button', { name: '+3 days', exact: true }).click();
+  await dialog.getByRole('button', { name: 'All (3)', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Selected (3)', exact: true }).click();
+  await dialog.getByRole('checkbox', { name: 'Open todo', exact: true }).uncheck();
+  await dialog.getByRole('button', { name: 'Move 2 items', exact: true }).click();
+  await expect(page).toHaveURL(sourceUrl);
+  await expect(contents).toContainText('Open todo');
+  await expect(contents).not.toContainText('Completed todo');
+  await page.getByRole('button', { name: 'Open list', exact: true }).click();
+  await expect(page).toHaveURL(`/#entity/${target}`);
+  await expect(contents.getByRole('checkbox', { name: 'Complete Completed todo', exact: true })).toBeChecked();
+  await expect(contents).toContainText('Keep this note');
+  await context.setOffline(false);
+  await sync(page);
+  await undo.click();
+  await expect(contents).not.toContainText('Completed todo');
+  expect(await localEntity(page, target)).toHaveProperty('deletedAt', null);
+  expect(await localEntity(page, note)).toHaveProperty('parentId', source);
+
+  await sync(page);
+  await page.goto(sourceUrl);
+  await expect(contents).toContainText('Open todo');
+  await sync(page);
+  await context.setOffline(true);
+  await openDialog();
+  await dialog.getByRole('button', { name: '+2 days', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Create list and move 1 item', exact: true }).click();
+  await expect(contents).not.toContainText('Open todo');
+  const conflict = await request.post('/api/sync', { data: { cursor: 0, mutations: [
+    create(crypto.randomUUID(), 'list', folder, { name: 'Work 22/11/2026 #office' }),
+  ] } });
+  expect((await conflict.json()).acknowledgements[0].accepted).toBe(true);
+  await context.setOffline(false);
+  await sync(page);
+  await expect(contents).toContainText('Open todo');
+  await expect(page.locator('#sync-errors')).toContainText('The destination already exists.');
+  await expect(undo).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Open list', exact: true })).toHaveCount(0);
+});
+
 test('folder calendar button creates a list with the current local date and preserves the input', async ({ page }) => {
   await page.goto('/');
   const calendar = page.getByRole('button', { name: "Add today's list", exact: true });

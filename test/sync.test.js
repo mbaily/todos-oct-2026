@@ -59,6 +59,39 @@ test('retry after a lost response is idempotent; later accepted field patches wi
   assert.throws(() => store.sync({ cursor: 0, mutations: [{ ...firstEdit, fields: { name: 'Reused ID' } }] }), /cannot be reused/);
 });
 
+test('moves validate the full selection and Undo keeps a destination containing other work', t => {
+  const store = createStore(':memory:');
+  t.after(() => store.close());
+  const { folder, list, todo, response } = tree(store);
+  const move = fields => mutation('move-items', list.id, fields);
+  const targetId = 'new-destination';
+  const failed = store.sync({ cursor: response.cursor, mutations: [
+    move({ destinationId: targetId, newListName: 'Tomorrow', itemIds: [todo.id, 'missing'] }),
+  ] });
+  assert.equal(failed.acknowledgements[0].accepted, false);
+  assert.deepEqual(failed.changes, []);
+
+  const elsewhere = create('list', folder.id, 'Other folder');
+  const crossFolder = store.sync({ cursor: failed.cursor, mutations: [
+    elsewhere, move({ destinationId: elsewhere.id, itemIds: [todo.id] }),
+  ] });
+  assert.equal(crossFolder.acknowledgements[1].accepted, false);
+
+  const valid = move({ destinationId: targetId, newListName: 'Tomorrow', itemIds: [todo.id] });
+  const moved = store.sync({ cursor: crossFolder.cursor, mutations: [valid] });
+  assert.equal(moved.acknowledgements[0].accepted, true);
+  assert.deepEqual(store.sync({ cursor: crossFolder.cursor, mutations: [valid] }), moved);
+  const added = create('note', targetId, 'Added after the move');
+  const undo = mutation('move-items', targetId, {
+    destinationId: list.id, itemIds: [todo.id], removeSourceCreatedBy: valid.opId,
+  });
+  const undone = store.sync({ cursor: moved.cursor, mutations: [added, undo] });
+  assert.ok(undone.acknowledgements.every(receipt => receipt.accepted));
+  assert.deepEqual(undone.changes.map(({ entity }) => [entity.id, entity.parentId]), [
+    [added.id, targetId], [todo.id, list.id],
+  ]);
+});
+
 test('HTTP retries ignore object key order and still apply other edits in the batch', async t => {
   const store = createStore(':memory:');
   const server = createApp(store).listen(0, '127.0.0.1');

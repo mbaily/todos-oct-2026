@@ -1,8 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { formatEntityDate } from '../src/lib/dates.js';
+import { formatEntityDate, nextListName } from '../src/lib/dates.js';
 import { dateDisplayOptions } from '../src/lib/model.js';
+
+test('move date shortcuts preserve a list title and use today for undated lists', () => {
+  const today = new Date(2026, 11, 31, 23, 45);
+  assert.equal(nextListName('Work 20/11/2026 #office'), 'Work 21/11/2026 #office');
+  assert.equal(nextListName('Year end 2026-12-31', { days: 2 }), 'Year end 2027-01-02');
+  assert.equal(nextListName('Sun, 28/02/28 #work', { pickedDate: '2028-02-29' }), 'Tue, 29/02/28 #work');
+  assert.equal(nextListName('Work', { today }), '01/01/2027');
+  assert.equal(nextListName('Work 31/02/2026', { today, days: 7 }), '07/01/2027');
+});
 
 test('date display options have the exact order, labels and timestamp selectors', () => {
   assert.deepEqual(dateDisplayOptions, [

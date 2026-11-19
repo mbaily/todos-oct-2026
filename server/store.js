@@ -137,7 +137,7 @@ export function createStore(filename, { onChange } = {}) {
   const receiptResult = db.prepare('SELECT result FROM receipts WHERE op_id = ?');
   const saveReceipt = db.prepare('INSERT INTO receipts (op_id, mutation, result) VALUES (?, ?, ?)');
   const saveEntity = db.prepare(`INSERT INTO entities (id, parent_id, type, data) VALUES (?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET data = excluded.data`);
+    ON CONFLICT(id) DO UPDATE SET parent_id = excluded.parent_id, data = excluded.data`);
   const saveChange = db.prepare('INSERT INTO changes (data, operation_id) VALUES (?, ?)');
   const changesSince = db.prepare('SELECT revision, data, operation_id FROM changes WHERE revision > ? AND revision <= ? ORDER BY revision LIMIT 500');
   const checkpointAt = db.prepare('SELECT checkpoint FROM changes WHERE revision = ?');

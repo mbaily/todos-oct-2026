@@ -21,6 +21,51 @@ async function reset() {
   });
 }
 
+test('a bulk move and its undo stay complete while their sync results arrive in pages', async t => {
+  await reset();
+  const server = createStore(':memory:');
+  t.after(() => server.close());
+  const create = (id, type, parentId, fields) => ({
+    action: 'create', opId: `create-${id}`, id, fields: { type, parentId, ...fields },
+  });
+  const itemIds = Array.from({ length: 501 }, (_, i) => `todo-${i}`);
+  const fixtures = [
+    create('book', 'notebook', null, { name: 'Book' }),
+    create('folder', 'folder', 'book', { name: 'Folder' }),
+    create('source', 'list', 'folder', { name: 'Source' }),
+    ...itemIds.map(id => create(id, 'todo', 'source', { text: id })),
+  ];
+  for (let start = 0; start < fixtures.length; start += 100) {
+    server.sync({ cursor: 0, mutations: fixtures.slice(start, start + 100) });
+  }
+  const sync = async () => {
+    const queue = await readSyncQueue();
+    const response = server.sync(queue);
+    await reconcile(response, queue);
+    return response;
+  };
+  while ((await sync()).hasMore) {}
+
+  const { inverse, opId } = await mutate('move-items', 'source', {
+    destinationId: 'destination', newListName: 'Tomorrow', itemIds,
+  });
+  const moved = await sync();
+  assert.equal(moved.operationId, opId);
+  assert.equal((await readEntities()).filter(item => item.parentId === 'destination').length, itemIds.length);
+  assert.equal((await sync()).hasMore, false);
+  const parentOnDisk = server.db.prepare('SELECT parent_id FROM entities WHERE id = ?');
+  assert.equal(parentOnDisk.get(itemIds[0]).parent_id, 'destination');
+
+  const undone = await mutate(inverse.action, inverse.id, inverse.fields);
+  const partial = await sync();
+  assert.equal(partial.operationId, undone.opId);
+  assert.equal((await readEntities()).filter(item => item.parentId === 'source').length, itemIds.length);
+  assert.ok(!(await readEntities()).some(item => item.id === 'destination'));
+  assert.equal((await sync()).hasMore, false);
+  assert.equal(parentOnDisk.get(itemIds[0]).parent_id, 'source');
+  assert.equal((await readSyncQueue()).mutations.length, 0);
+});
+
 test('IndexedDB atomically stores optimistic edits and outbox; failures leave neither', async () => {
   await reset();
   const id = randomUUID();
