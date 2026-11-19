@@ -168,7 +168,7 @@
     const sourceId = currentId;
     listActionsOpen = false;
     try {
-      await flushEditors();
+      await waitForEditSaves();
       if (canMoveItems && currentId === sourceId) moveSourceId = sourceId;
     } catch (problem) { showError(problem); }
   }
@@ -200,7 +200,7 @@
     const version = ++panelVersion;
     const closing = toggle && activePanelId === id;
     if (activePanelId === id && !closing) return;
-    await flushEditors();
+    await waitForEditSaves();
     if (version !== panelVersion || specialView || !items.some(entity => entity.id === id)) return;
     activePanelId = closing ? null : id;
   }
@@ -224,10 +224,10 @@
     if (currentId && !selectedContainer && !waitingForLinkedItem) navigate(null);
   }
 
-  async function save(action, id, fields, recordUndo = true, undoGroup = null) {
+  async function save(action, id, fields, recordUndo = true) {
     const result = await mutate(action, id, fields);
     if (recordUndo && !syncErrors.some(failure => failure.id === result.inverse?.opId)) {
-      undoHistory = appendUndo(undoHistory, result.inverse, undoGroup);
+      undoHistory = appendUndo(undoHistory, result.inverse);
     }
     error = '';
     channel?.postMessage({ type: 'mutation' });
@@ -253,8 +253,8 @@
     finally { sorting = false; }
   }
 
-  function registerEditor(flush, reset) {
-    const editor = { flush, reset };
+  function registerEditor(whenSaved, reset) {
+    const editor = { whenSaved, reset };
     editors.add(editor);
     return () => editors.delete(editor);
   }
@@ -286,8 +286,8 @@
     pendingDrafts = next;
   }
 
-  async function flushEditors() {
-    await Promise.all([...editors].map(editor => editor.flush()));
+  async function waitForEditSaves() {
+    await Promise.all([...editors].map(editor => editor.whenSaved()));
   }
 
   async function undo() {
@@ -296,8 +296,8 @@
     try {
       const hadDraft = pendingDrafts.size > 0;
       const previousUndo = undoHistory.at(-1);
-      await flushEditors();
-      // Invalid or unchanged drafts can be discarded without undoing an older edit.
+      await waitForEditSaves();
+      // Discarding an unsaved draft leaves older Undo steps available.
       const entry = undoHistory.at(-1);
       if (!(hadDraft && entry === previousUndo) && entry) {
         const { action, id, fields } = entry;
@@ -317,7 +317,7 @@
 
   async function navigate(id) {
     try {
-      await flushEditors();
+      await waitForEditSaves();
       search = '';
       pageKind = 'entities';
       currentTag = null;
@@ -331,7 +331,7 @@
 
   async function openHashtags() {
     try {
-      await flushEditors();
+      await waitForEditSaves();
       if (pageKind === 'entities') hashtagBackId = currentId;
       pageKind = 'hashtags';
       currentId = null;
@@ -350,7 +350,7 @@
 
   async function openHashtag(tag, rememberBack = false) {
     try {
-      await flushEditors();
+      await waitForEditSaves();
       const hash = `#tag/${encodeURIComponent(tag)}`;
       if (rememberBack && (pageKind !== 'tag' || currentTag !== tag)) {
         // Keep the previous view with its history entry, including for Back after a reload.
@@ -376,7 +376,7 @@
 
   async function openTrash(rememberBack = true) {
     try {
-      await flushEditors();
+      await waitForEditSaves();
       if (rememberBack !== false && !showingTrash) trashBackHash = location.hash;
       pageKind = 'trash';
       currentId = null;
@@ -389,7 +389,7 @@
 
   async function openNearby(rememberBack = true) {
     try {
-      await flushEditors();
+      await waitForEditSaves();
       if (rememberBack !== false && !showingNearby && !showingLocations) nearbyBackHash = location.hash;
       pageKind = 'nearby';
       currentId = null;
@@ -401,7 +401,7 @@
 
   async function openLocations() {
     try {
-      await flushEditors();
+      await waitForEditSaves();
       pageKind = 'locations';
       currentId = null;
       currentTag = null;
@@ -412,7 +412,7 @@
 
   async function openSettings() {
     try {
-      await flushEditors();
+      await waitForEditSaves();
       pageKind = 'settings';
       currentId = null;
       currentTag = null;
@@ -455,7 +455,7 @@
     const hash = location.hash;
     const next = parseViewHash(hash);
     if (next.id !== currentId || next.kind !== pageKind || next.tag !== currentTag) {
-      await flushEditors();
+      await waitForEditSaves();
       if (location.hash !== hash) return;
       const source = history.state?.hashtagSource;
       const previousHash = pageKind === 'entities' ? currentId ? `#entity/${currentId}` : ''
@@ -492,7 +492,7 @@
   }
 
   async function syncNow() {
-    try { await flushEditors(); sync(); }
+    try { await waitForEditSaves(); sync(); }
     catch (problem) { showError(problem); }
   }
 
@@ -676,7 +676,7 @@
       </label>
     </fieldset>
   {:else if showingNearby}
-    <NearbyErrands {snapshot} {completionTags} {save} {navigate} {openLocations} {registerEditor} {flushEditors} {todoCounts} dateDisplay={activeDateDisplay.value} ondraft={draftChanged} onerror={showError} />
+    <NearbyErrands {snapshot} {completionTags} {save} {navigate} {openLocations} {registerEditor} {waitForEditSaves} {todoCounts} dateDisplay={activeDateDisplay.value} ondraft={draftChanged} onerror={showError} />
   {:else if showingLocations}
     <LocationsManager {snapshot} {save} onerror={showError} onclearerror={() => error = ''} />
   {:else if showingTrash}

@@ -152,7 +152,7 @@ test('pins work offline, sync across browsers, and unpinning leaves favourites a
     await expect(favouriteRow(page, id)).toBeVisible();
     await row.getByRole('button', { name: 'Edit', exact: true }).click();
     await row.getByRole('textbox', { name: 'Name', exact: true }).fill(`${name} edited`);
-    await row.getByRole('button', { name: 'Close', exact: true }).click();
+    await row.getByRole('button', { name: 'Save', exact: true }).click();
     await pinnedRow(page, id).getByRole('button', { name: 'Pin', exact: true }).click();
     await expect(pinnedRow(page, id)).toHaveCount(0);
     await expect(favouriteRow(page, id)).toBeVisible();

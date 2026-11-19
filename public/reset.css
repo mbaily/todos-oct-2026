@@ -115,9 +115,8 @@ button.pill[aria-pressed="true"] { background: #333; border-color: #ccc; }
   overscroll-behavior: contain;
   align-content: flex-start;
   padding: 4px;
-  border: 1px solid #555;
-  background: var(--page-background);
 }
+.hashtag-suggestions .pill { background: var(--page-background); }
 button.location-name { border: 0; padding: 0; text-align: left; font: inherit; max-width: 100%; overflow-wrap: anywhere; }
 .location-form input[type="number"] { width: 10em; max-width: 100%; }
 .nearby-row { margin-top: 4px; overflow-wrap: anywhere; }

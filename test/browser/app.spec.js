@@ -18,7 +18,7 @@ async function add(page, type, value) {
 }
 
 async function sync(page) {
-  await expect(page.locator('#contents output').filter({ hasText: /Waiting to save…|Saving…/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Save', exact: true }).and(page.locator('button:disabled'))).toHaveCount(0);
   await expect.poll(() => pendingCount(page)).toBe(0);
   await expect(page.locator('#sync-status')).toHaveText('Synced');
 }
@@ -449,7 +449,7 @@ test('list badges include zero, track all direct incomplete todos independently 
     const editor = listView.getByRole('textbox', { name: 'Name', exact: true });
     await expect(editor).toHaveValue(listName);
     await expect(editor).toBeFocused();
-    await page.clock.pauseAt(new Date());
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
     clockPaused = true;
     const draft = 'Count live renamed #count-live-renamed';
     await editor.fill(draft);
@@ -776,6 +776,7 @@ test('Trash persists and restores deleted entities offline, preserving separate 
   await row(page, 'Trash recovery todo').getByRole('checkbox').check();
   await clickAction(row(page, 'Trash recovery todo'), 'Edit');
   await page.getByRole('textbox', { name: 'Todo text', exact: true }).fill('Trash recovery todo saved #restored-trash');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   const trash = page.getByRole('button', { name: 'Trash', exact: true });
   await expect(trash).toHaveCount(1);
   await trash.click();
@@ -919,6 +920,7 @@ test('one global hashtag button opens a live alphabetical index with date sortin
   await clickAction(row(page, original), 'Edit');
   const draft = `${original} #draft_index`;
   await page.getByRole('textbox', { name: 'Todo text', exact: true }).fill(draft);
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   const favourite = page.locator(`#favourites > div[data-id="${bookId}"]`);
   const hashtagsButton = page.getByRole('button', { name: 'All hashtags', exact: true });
   await expect(hashtagsButton).toHaveCount(1);
@@ -1011,7 +1013,7 @@ test('one global hashtag button opens a live alphabetical index with date sortin
   await sync(page);
 });
 
-test('breadcrumbs sit below favourites, follow renamed ancestors and save pending edits when jumping', async ({ page }) => {
+test('breadcrumbs sit below favourites and follow renamed ancestors', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#breadcrumbs [aria-current="page"]').getByRole('img', { name: 'Home', exact: true })).toHaveText('🏠');
   await add(page, 'notebook', 'Breadcrumb notebook');
@@ -1034,12 +1036,13 @@ test('breadcrumbs sit below favourites, follow renamed ancestors and save pendin
   const id = await row(page, 'Breadcrumb task').getAttribute('data-id');
   await clickAction(row(page, 'Breadcrumb task'), 'Edit');
   await page.getByRole('textbox', { name: 'Todo text', exact: true }).fill('Breadcrumb saved #crumb-task');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   await crumbs.getByRole('link', { name: 'Breadcrumb notebook', exact: true }).click();
   expect((await localEntity(page, id)).text).toBe('Breadcrumb saved #crumb-task');
   await expect(crumbs.locator('[aria-current="page"]')).toHaveText('Breadcrumb notebook');
   await row(page, 'Breadcrumb folder').getByRole('button', { name: 'Edit', exact: true }).click();
   await row(page, 'Breadcrumb folder').getByRole('textbox', { name: 'Name', exact: true }).fill('Breadcrumb renamed folder');
-  await row(page, 'Breadcrumb renamed folder').getByRole('button', { name: 'Close', exact: true }).click();
+  await row(page, 'Breadcrumb renamed folder').getByRole('button', { name: 'Save', exact: true }).click();
   await row(page, 'Breadcrumb renamed folder').getByRole('link').click();
   await row(page, 'Breadcrumb nested').getByRole('link').click();
   await row(page, 'Breadcrumb list').getByRole('link').click();
@@ -1177,7 +1180,7 @@ test('only note and todo text URLs become safe links in contents, search and fav
   await editor.fill(edited);
   await expect(editor).toHaveValue(edited);
   await expect(todo.getByRole('link', { name: 'https://example.com/edited', exact: true })).toHaveAttribute('href', 'https://example.com/edited');
-  await todo.getByRole('button', { name: 'Close', exact: true }).click();
+  await todo.getByRole('button', { name: 'Save', exact: true }).click();
   await sync(page);
   expect((await localEntity(page, todoId)).text).toBe(edited);
   await page.reload();
@@ -1247,7 +1250,7 @@ test('viewer hashtags open local results, preserve item links, and leave editors
   await expect(page).toHaveURL(`/${tagHref}`);
   await expect(page.getByRole('searchbox', { name: 'Search', exact: true })).toHaveValue(`#${tag}`);
   await expect(page.locator('#contents > [data-id]')).toHaveCount(4);
-  expect((await localEntity(page, todoId)).text).toBe(draft);
+  expect((await localEntity(page, todoId)).text).toBe(todoText);
   const back = page.getByRole('button', { name: 'Back', exact: true });
   await back.click();
   await expect(page).toHaveURL(`/#entity/${listId}`);
@@ -1284,6 +1287,10 @@ test('viewer hashtags open local results, preserve item links, and leave editors
   await expect(note).toBeVisible();
   await back.click();
   await expect(page).toHaveURL(`/#entity/${listId}`);
+  await clickAction(todo, 'Pin');
+  await clickAction(todo, 'Favourite');
+  await context.setOffline(false);
+  await sync(page);
 });
 
 test('Back, sort and Undo sit below Search and immediately above contents on every view', async ({ page }) => {
@@ -1504,7 +1511,7 @@ test('independent date preferences persist offline with sort and edit Undo, then
     const note = page.locator(`#contents > div[data-id="${noteId}"]`);
     await clickAction(note, 'Edit');
     await note.getByRole('textbox', { name: 'Note text', exact: true }).fill('Date preferences saved edit');
-    await note.getByRole('button', { name: 'Close', exact: true }).click();
+    await note.getByRole('button', { name: 'Save', exact: true }).click();
     await expect.poll(async () => (await localEntity(page, noteId)).text).toBe('Date preferences saved edit');
     const edited = await localEntity(page, noteId);
     for (const mode of dateDisplays.slice(1)) {
@@ -2008,7 +2015,7 @@ test('plain drill-down, expanding reactive editors, notes, checkboxes, local sea
   await editor.pressSequentially(' tomorrow');
   await expect(editor).toBeFocused();
   await expect(row(page, 'Buy oats #errand tomorrow')).toBeVisible();
-  await row(page, 'Buy oats #errand tomorrow').getByRole('button', { name: 'Close', exact: true }).click();
+  await row(page, 'Buy oats #errand tomorrow').getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByRole('checkbox', { name: 'Complete Buy oats #errand tomorrow', exact: true })).toBeChecked();
   await sync(page);
   await page.reload();
@@ -2066,6 +2073,7 @@ test.describe('hashtag completion', () => {
     await creation.pressSequentially('P');
     await expect(pill('#pills-pharmacy')).toBeVisible();
     await expect(pill('#pills-supermarket')).toBeVisible();
+    await expect(suggestions).toHaveCSS('border-top-width', '0px');
     await creation.pressSequentially('ills-s');
     await expect(suggestions.getByRole('button')).toHaveText(['#pills-supermarket', '#pills-supper']);
     const fieldBox = await creation.boundingBox();
@@ -2111,7 +2119,8 @@ test.describe('hashtag completion', () => {
     await todoEditor.fill('Buy soy milk #pills-p');
     await pill('#pills-pharmacy').tap();
     await expect(todoEditor).toHaveValue('Buy soy milk #pills-pharmacy ');
-    await todo.getByRole('button', { name: 'Close', exact: true }).click();
+    await todo.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(todoEditor).toHaveCount(0);
     expect(await localEntity(page, await todo.getAttribute('data-id'))).toMatchObject({
       text: 'Buy soy milk #pills-pharmacy ', tags: ['pills-pharmacy'],
     });
@@ -2534,7 +2543,7 @@ test('sort cycles all four date orders per view, persists after reload and syncs
     await page.clock.setFixedTime(time += 1000);
     await clickAction(row(page, `${prefix} A`), 'Edit');
     await row(page, `${prefix} A`).getByRole('textbox').fill(`${prefix} A edited`);
-    await row(page, `${prefix} A`).getByRole('button', { name: 'Close', exact: true }).click();
+    await row(page, `${prefix} A`).getByRole('button', { name: 'Save', exact: true }).click();
     const orderedIds = () => row(page, prefix).evaluateAll(rows => rows.map(row => row.dataset.id));
     for (const [label, order] of [
       ['Created desc', [ids[2], ids[1], ids[0]]],
@@ -2614,8 +2623,10 @@ test('two browsers converge on the last edit accepted by the server', async ({ p
     await row(page, 'Shared #conflict').getByRole('button', { name: 'Edit', exact: true }).click();
     await row(other, 'Shared #conflict').getByRole('button', { name: 'Edit', exact: true }).click();
     await row(page, 'Shared #conflict').getByRole('textbox', { name: 'Name', exact: true }).fill('First edit #conflict');
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
     await sync(page);
     await other.getByRole('textbox', { name: 'Name', exact: true }).fill('Last edit #conflict');
+    await other.getByRole('button', { name: 'Save', exact: true }).click();
     await sync(other);
     await page.bringToFront();
     await expect(page.getByRole('link', { name: 'Last edit #conflict', exact: true })).toBeVisible({ timeout: 15000 });
@@ -2623,60 +2634,57 @@ test('two browsers converge on the last edit accepted by the server', async ({ p
   } finally { await otherContext.close(); }
 });
 
-test('text autosave waits two seconds after the last input and flushes on close and navigation', async ({ page, request }) => {
+test('creating and editing items only persist on explicit submission', async ({ page, request }) => {
   await page.clock.install();
   await page.goto('/');
-  await add(page, 'notebook', 'Debounce original');
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
+  const creation = page.getByRole('textbox', { name: 'New notebook', exact: true });
+  await creation.fill('Unsubmitted notebook');
+  await page.clock.runFor(5000);
+  await expect(row(page, 'Unsubmitted notebook')).toHaveCount(0);
+  await add(page, 'notebook', 'Manual save original');
   await sync(page);
-  const id = await row(page, 'Debounce original').getAttribute('data-id');
+  const id = await row(page, 'Manual save original').getAttribute('data-id');
   const view = page.locator(`#contents > div[data-id="${id}"]`);
-  await page.clock.pauseAt(new Date());
-  await view.getByRole('button', { name: 'Edit', exact: true }).click();
-  const editor = page.getByRole('textbox', { name: 'Name', exact: true });
-  await editor.fill('First unsaved draft');
-  await page.clock.runFor(1500);
-  expect((await localEntity(page, id)).name).toBe('Debounce original');
-  await editor.fill('Final debounce draft');
-  await page.clock.runFor(1999);
-  expect((await localEntity(page, id)).name).toBe('Debounce original');
-  await page.clock.runFor(1);
-  await expect.poll(async () => (await localEntity(page, id)).name).toBe('Final debounce draft');
+  const editor = view.getByRole('textbox', { name: 'Name', exact: true });
+  const open = () => view.getByRole('button', { name: 'Edit', exact: true }).click();
+  const accept = () => view.getByRole('button', { name: 'Save', exact: true }).click();
+
+  await open();
+  await editor.fill('Unsubmitted edit');
+  await page.clock.runFor(5000);
+  expect((await localEntity(page, id)).name).toBe('Manual save original');
+  await expect(view.locator('output')).toHaveCount(0);
+  await view.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(view.getByRole('link')).toHaveText('Manual save original');
+
+  await open();
+  await editor.fill('Discard on navigation');
+  await view.getByRole('link').click();
+  await expect(editor).toHaveCount(0);
+  expect((await localEntity(page, id)).name).toBe('Manual save original');
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
+
+  await open();
+  await editor.fill('');
+  await accept();
+  await expect(view.getByRole('alert')).toHaveText('A name is required.');
+  await editor.fill('Manually saved name');
+  await accept();
+  await expect(editor).toHaveCount(0);
+  expect((await localEntity(page, id)).name).toBe('Manually saved name');
+  await expect(page.getByText('Saved locally', { exact: true })).toHaveCount(0);
   await expect.poll(async () => {
     const response = await request.post('/api/sync', { data: { cursor: 0, mutations: [] } });
     const data = await response.json();
     return data.changes.filter(change => change.entity.id === id).map(change => change.entity.name);
-  }).toEqual(['Debounce original', 'Final debounce draft']);
+  }).toEqual(['Manual save original', 'Manually saved name']);
 
-  // Invalid names cancel the timer for a preceding valid draft.
-  await editor.fill('Do not save this intermediate name');
-  await page.clock.runFor(1000);
-  await editor.fill('');
-  await page.clock.runFor(2000);
-  expect((await localEntity(page, id)).name).toBe('Final debounce draft');
-  await expect(view).toContainText('A name is required.');
-
-  await editor.fill('Close flush draft');
-  await view.getByRole('button', { name: 'Close', exact: true }).click();
-  await expect.poll(async () => (await localEntity(page, id)).name).toBe('Close flush draft');
-  await view.getByRole('button', { name: 'Edit', exact: true }).click();
-  await editor.fill('Navigation flush draft');
-  await view.getByRole('link').click();
-  await expect(page.locator('#contents > div')).toHaveCount(0);
-  expect((await localEntity(page, id)).name).toBe('Navigation flush draft');
-  await page.getByRole('button', { name: 'Back', exact: true }).click();
-  await view.getByRole('button', { name: 'Edit', exact: true }).click();
-  await editor.fill('Automatic sync draft');
-  await page.clock.runFor(2000);
-  await sync(page);
-  expect((await localEntity(page, id)).name).toBe('Automatic sync draft');
-
-  // Deleting cancels a draft instead of letting its timer edit an item in trash.
-  await editor.fill('Discarded pending draft');
+  await open();
+  await editor.fill('Discard on delete');
   await deleteContainer(page, view);
   await expect(view).toHaveCount(0);
-  await page.clock.runFor(2000);
-  await expect.poll(async () => Boolean((await localEntity(page, id)).deletedAt)).toBe(true);
-  await expect(page.locator('#error')).toBeHidden();
+  expect((await localEntity(page, id)).name).toBe('Manually saved name');
 });
 
 test('mobile SIP Enter accepts new items and editors without keydown or unwanted newlines', async ({ browser, baseURL }) => {
@@ -2906,7 +2914,7 @@ test('global favourites toggle for all entity types, navigate, survive reload an
   await expect(row(page, 'Favourite todo')).toBeVisible();
   await clickAction(row(page, 'Favourite todo'), 'Edit');
   await row(page, 'Favourite todo').getByRole('textbox').fill('Favourite todo edited');
-  await row(page, 'Favourite todo').getByRole('button', { name: 'Close', exact: true }).click();
+  await row(page, 'Favourite todo').getByRole('button', { name: 'Save', exact: true }).click();
   await expect(favourites.getByRole('link', { name: '☐ Favourite todo edited', exact: true })).toBeVisible();
   await favourites.locator(`div[data-id="${ids[3]}"]`).getByRole('button', { name: 'Favourite', exact: true }).click();
   await expect(favourites.locator(':scope > div')).toHaveCount(4);
@@ -2946,7 +2954,7 @@ test('Undo reverses saved and pending edits, checkboxes and deletions including 
   await add(page, 'notebook', 'Undo notebook #undo');
   await row(page, 'Undo notebook').getByRole('button', { name: 'Edit', exact: true }).click();
   await row(page, 'Undo notebook').getByRole('textbox').fill('Undo renamed notebook #undo');
-  await row(page, 'Undo renamed notebook').getByRole('button', { name: 'Close', exact: true }).click();
+  await row(page, 'Undo renamed notebook').getByRole('button', { name: 'Save', exact: true }).click();
   await undo.click();
   await expect(row(page, 'Undo notebook')).toBeVisible();
   await expect(undo).toBeDisabled();
@@ -3010,8 +3018,7 @@ test('Undo reverses saved and pending edits, checkboxes and deletions including 
   await expect(undo).toBeDisabled();
 });
 
-test('multiple Undo steps group autosaves and survive navigation, searching and new edits between clicks', async ({ page, context, browser }) => {
-  await page.clock.install();
+test('multiple explicit Undo steps survive navigation, searching and new edits between clicks', async ({ page, context, browser }) => {
   await page.goto('/');
   for (const [type, name] of [['notebook', 'History book'], ['folder', 'History folder'], ['list', 'History list']]) {
     await add(page, type, name);
@@ -3026,20 +3033,14 @@ test('multiple Undo steps group autosaves and survive navigation, searching and 
   const undo = page.getByRole('button', { name: 'Undo', exact: true });
   await sync(page);
   await context.setOffline(true);
-  await page.clock.pauseAt(new Date());
   try {
     await clickAction(note, 'Edit');
-    await note.getByRole('textbox').fill('History intermediate #history');
-    await page.clock.runFor(2100);
-    await expect.poll(async () => (await localEntity(page, noteId)).text).toBe('History intermediate #history');
     await note.getByRole('textbox').fill('History first edit #history');
-    await page.clock.runFor(2100);
-    await expect.poll(async () => (await localEntity(page, noteId)).text).toBe('History first edit #history');
-    await note.getByRole('button', { name: 'Close', exact: true }).click();
+    await note.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(undo).toHaveAttribute('title', 'Undo last edit or delete (1 saved step available)');
     await clickAction(note, 'Edit');
     await note.getByRole('textbox').fill('History second edit #history');
-    await note.getByRole('button', { name: 'Close', exact: true }).click();
+    await note.getByRole('button', { name: 'Save', exact: true }).click();
     await todo.getByRole('checkbox').check();
     await expect(undo).toHaveAttribute('title', 'Undo last edit or delete (3 saved steps available)');
     await undo.click();
@@ -3056,7 +3057,7 @@ test('multiple Undo steps group autosaves and survive navigation, searching and 
     await undo.click();
     expect((await localEntity(page, noteId)).text).toBe('History first edit #history');
     await expect(undo).toBeEnabled();
-    // A new change goes on top without losing the older, grouped text edit.
+    // A new change goes on top without losing the older text edit.
     await todo.getByRole('checkbox').check();
     await undo.click();
     await expect(todo.getByRole('checkbox')).not.toBeChecked();
@@ -3065,31 +3066,16 @@ test('multiple Undo steps group autosaves and survive navigation, searching and 
     await expect(undo).toBeDisabled();
     expect((await localEntity(page, noteId)).favourite).toBe(true);
     expect((await localEntity(page, noteId)).pinned).toBe(true);
-    // Flushing a pending autosave also belongs to the same session's step.
+    // Discarding a draft leaves the last explicitly saved edit in the history.
     await clickAction(note, 'Edit');
-    await note.getByRole('textbox').fill('History saved draft #history');
-    await page.clock.runFor(2100);
-    await expect.poll(async () => (await localEntity(page, noteId)).text).toBe('History saved draft #history');
-    await note.getByRole('textbox').fill('History pending draft #history');
+    await note.getByRole('textbox').fill('History saved edit #history');
+    await note.getByRole('button', { name: 'Save', exact: true }).click();
+    await clickAction(note, 'Edit');
+    await note.getByRole('textbox').fill('History unsaved draft #history');
     await undo.click();
     await expect(note.getByRole('textbox')).toHaveCount(0);
-    expect((await localEntity(page, noteId)).text).toBe('History original note #history');
-    await page.clock.runFor(3000);
-    expect((await localEntity(page, noteId)).text).toBe('History original note #history');
-    await expect(undo).toBeDisabled();
-    // A checkbox change between autosaves must stay between the two text steps.
-    await clickAction(note, 'Edit');
-    await note.getByRole('textbox').fill('History interrupted session #history');
-    await page.clock.runFor(2100);
-    await expect.poll(async () => (await localEntity(page, noteId)).text).toBe('History interrupted session #history');
-    await todo.getByRole('checkbox').check();
-    await note.getByRole('textbox').fill('History after checkbox #history');
-    await note.getByRole('button', { name: 'Close', exact: true }).click();
-    await undo.click();
-    expect((await localEntity(page, noteId)).text).toBe('History interrupted session #history');
-    await expect(todo.getByRole('checkbox')).toBeChecked();
-    await undo.click();
-    await expect(todo.getByRole('checkbox')).not.toBeChecked();
+    expect((await localEntity(page, noteId)).text).toBe('History saved edit #history');
+    await expect(undo).toBeEnabled();
     await undo.click();
     expect((await localEntity(page, noteId)).text).toBe('History original note #history');
     await expect(undo).toBeDisabled();
@@ -3105,7 +3091,6 @@ test('multiple Undo steps group autosaves and survive navigation, searching and 
     await expect(todo.getByRole('checkbox')).not.toBeChecked();
     await expect(undo).toBeDisabled();
   } finally { await context.setOffline(false); }
-  await page.clock.resume();
   await sync(page);
   const otherContext = await browser.newContext();
   try {
@@ -3168,7 +3153,7 @@ test('manual Restore removes its deletion step without discarding other Undo ste
   const undo = page.getByRole('button', { name: 'Undo', exact: true });
   await clickAction(first, 'Edit');
   await first.getByRole('textbox').fill('Restore history edited');
-  await first.getByRole('button', { name: 'Close', exact: true }).click();
+  await first.getByRole('button', { name: 'Save', exact: true }).click();
   await clickAction(first, 'Delete');
   await clickAction(second, 'Delete');
   await page.getByRole('button', { name: 'Trash', exact: true }).click();
@@ -3202,7 +3187,7 @@ test('all mutation paths work without crypto.randomUUID, as on an HTTP LAN origi
   const todoId = await todo.getAttribute('data-id');
   await clickAction(todo, 'Edit');
   await todo.getByRole('textbox').fill('Fallback UUID edited');
-  await row(page, 'Fallback UUID edited').getByRole('button', { name: 'Close', exact: true }).click();
+  await row(page, 'Fallback UUID edited').getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByRole('checkbox', { name: 'Complete Fallback UUID edited', exact: true }).check();
   await clickAction(row(page, 'Fallback UUID edited'), 'Favourite');
   await page.locator('#sort-order').click();
@@ -3218,7 +3203,7 @@ test('all mutation paths work without crypto.randomUUID, as on an HTTP LAN origi
 });
 
 for (const width of [1280, 390]) {
-  test(`keyboard text focus reveals one read-only toolbar at ${width}px and row switches save drafts`, async ({ page }) => {
+  test(`keyboard text focus reveals one read-only toolbar at ${width}px and row switches discard drafts`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });
     await page.clock.install();
     await page.goto('/');
@@ -3304,16 +3289,16 @@ for (const width of [1280, 390]) {
       await expect(contents.locator('.entity-panel')).toHaveCount(1);
       const draft = `Focus note A saved ${tag}`;
       await editor.fill(draft);
-      await expect(note.locator('output')).toHaveText('Waiting to save…');
+      await expect(note.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
       expect((await localEntity(page, noteId)).text).toBe(noteText);
       await noteBSpan.focus();
       await expectReadOnlyActions(page, noteB, 'note');
       await expect(note.locator(':scope > .entity-panel')).toHaveCount(0);
       await expect(editor).toHaveCount(0);
-      await expect.poll(async () => (await localEntity(page, noteId)).text).toBe(draft);
+      expect((await localEntity(page, noteId)).text).toBe(noteText);
       await noteSpan.focus();
       await expectReadOnlyActions(page, note, 'note');
-      await expect(noteSpan).toHaveText(`📝 ${draft}`);
+      await expect(noteSpan).toHaveText(`📝 ${noteText}`);
 
       const search = page.getByRole('searchbox', { name: 'Search', exact: true });
       await search.fill(tag);
@@ -3330,7 +3315,7 @@ for (const width of [1280, 390]) {
       await expectReadOnlyActions(page, note, 'note');
       await sync(page);
       await page.reload();
-      await expect(noteSpan).toHaveText(`📝 ${draft}`);
+      await expect(noteSpan).toHaveText(`📝 ${noteText}`);
       await expect(checkbox).toBeChecked();
       await expect(contents.locator('.entity-panel')).toHaveCount(0);
       await expect(contents.getByRole('toolbar')).toHaveCount(0);
@@ -3369,7 +3354,7 @@ for (const width of [1280, 390]) {
       await todo.getByRole('textbox').fill(collapseDraft);
       await todoSpan.click(plainText);
       await expectCollapsedActions(page, todo);
-      await expect.poll(async () => (await localEntity(page, todoId)).text).toBe(collapseDraft);
+      expect((await localEntity(page, todoId)).text).toBe(todoText);
       await todoSpan.click(plainText);
       await expectReadOnlyActions(page, todo, 'todo');
       await sync(page);
@@ -3385,7 +3370,7 @@ for (const width of [1280, 390]) {
   });
 }
 
-test('touch text taps stay read-only until Edit, save drafts on row switches and leave URL taps independent', async ({ browser, baseURL }) => {
+test('touch text taps stay read-only until Edit, discard drafts on row switches and leave URL taps independent', async ({ browser, baseURL }) => {
   const context = await browser.newContext({ baseURL, isMobile: true, hasTouch: true, viewport: { width: 390, height: 844 } });
   try {
     const page = await context.newPage();
@@ -3455,7 +3440,7 @@ test('touch text taps stay read-only until Edit, save drafts on row switches and
     await noteSpan.tap();
     await expectReadOnlyActions(page, note, 'note');
     await expect(todoEditor).toHaveCount(0);
-    await expect.poll(async () => (await localEntity(page, todoId)).text).toBe('Touch panel todo saved');
+    expect((await localEntity(page, todoId)).text).toBe(todoText);
 
     await note.getByRole('toolbar').getByRole('button', { name: 'Edit', exact: true }).tap();
     const noteEditor = note.getByRole('textbox', { name: 'Note text', exact: true });
@@ -3468,18 +3453,18 @@ test('touch text taps stay read-only until Edit, save drafts on row switches and
     await noteBSpan.tap({ position: { x: 5, y: 5 } });
     await expectReadOnlyActions(page, noteB, 'note');
     await expect(noteEditor).toHaveCount(0);
-    await expect.poll(async () => (await localEntity(page, noteId)).text).toBe('Touch panel note A saved');
+    expect((await localEntity(page, noteId)).text).toBe(noteText);
     await noteSpan.tap();
     await expectReadOnlyActions(page, note, 'note');
-    await expect(noteSpan).toHaveText('📝 Touch panel note A saved');
+    await expect(noteSpan).toHaveText(`📝 ${noteText}`);
     await note.getByRole('toolbar').getByRole('button', { name: 'Edit', exact: true }).tap();
     await note.getByRole('textbox').fill('Touch panel note A collapsed');
     await noteSpan.tap();
     await expectCollapsedActions(page, note);
-    await expect.poll(async () => (await localEntity(page, noteId)).text).toBe('Touch panel note A collapsed');
+    expect((await localEntity(page, noteId)).text).toBe(noteText);
     await noteSpan.tap();
     await expectReadOnlyActions(page, note, 'note');
-    await expect(noteSpan).toHaveText('📝 Touch panel note A collapsed');
+    await expect(noteSpan).toHaveText(`📝 ${noteText}`);
     await sync(page);
     await expect(page.locator('#error')).toBeHidden();
   } finally { await context.close(); }

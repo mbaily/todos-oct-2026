@@ -13,29 +13,9 @@ test('undo retains the newest 50 steps and ignores non-undoable saves', () => {
   assert.equal(recordUndo(history, null), history);
 });
 
-test('autosaves in one session keep the original values without mutating earlier history', () => {
-  const group = {};
-  const first = recordUndo([], edit('note', { text: 'Original' }), group);
-  const second = recordUndo(first, edit('note', { text: 'Intermediate' }), group);
-  assert.equal(second.length, 1);
-  assert.deepEqual(second[0].fields, { text: 'Original' });
-  assert.notEqual(second[0], first[0]);
-  assert.deepEqual(first[0].fields, { text: 'Original' });
-  const reopened = recordUndo(second, edit('note', { text: 'Final' }), {});
-  assert.equal(reopened.length, 2);
-  assert.deepEqual(reopened.at(-1).fields, { text: 'Final' });
-});
-
-test('intervening checkbox changes, another editor or deletion separate text steps', () => {
-  const group = {};
-  for (const intervening of [edit('todo', { checked: false }), edit('note', { checked: false }), { action: 'restore', id: 'note', fields: { trashOpId: 'deletion' } }]) {
-    let history = recordUndo([], edit('note', { text: 'Original' }), group);
-    history = recordUndo(history, intervening);
-    history = recordUndo(history, edit('note', { text: 'Intermediate' }), group);
-    assert.equal(history.length, 3);
-    assert.deepEqual(history[0].fields, { text: 'Original' });
-    assert.deepEqual(history.at(-1).fields, { text: 'Intermediate' });
-  }
-  const anotherEditor = recordUndo(recordUndo([], edit('note', { text: 'Original' }), group), edit('other-note', { text: 'Other' }), {});
-  assert.equal(recordUndo(anotherEditor, edit('note', { text: 'Intermediate' }), group).length, 3);
+test('explicitly saved edits to the same item stay as separate Undo steps', () => {
+  const first = recordUndo([], edit('note', { text: 'Original' }));
+  const second = recordUndo(first, edit('note', { text: 'First save' }));
+  assert.deepEqual(first.map(step => step.fields.text), ['Original']);
+  assert.deepEqual(second.map(step => step.fields.text), ['Original', 'First save']);
 });

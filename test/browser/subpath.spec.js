@@ -105,7 +105,8 @@ test('Todos can reopen offline, edit local data, and sync after reconnecting', a
   const notebook = reopened.locator(`[data-id="${id}"]`);
   await notebook.getByRole('button', { name: 'Edit', exact: true }).click();
   await notebook.getByRole('textbox', { name: 'Name', exact: true }).fill(updated);
-  await expect(notebook.getByText('Saved locally', { exact: true })).toBeVisible();
+  await notebook.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(notebook.getByRole('textbox', { name: 'Name', exact: true })).toHaveCount(0);
   const serverName = async () => {
     const result = await request.post('api/sync', { data: { cursor: seedReceipt.revision - 1, mutations: [] } });
     return (await result.json()).changes.filter(change => change.entity.id === id).at(-1)?.entity.name;

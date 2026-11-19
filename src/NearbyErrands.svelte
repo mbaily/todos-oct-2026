@@ -3,7 +3,7 @@
   import { ROOT_VIEW_ID } from './lib/model.js';
   import EntityRow from './EntityRow.svelte';
 
-  let { snapshot, completionTags, save, navigate, openLocations, registerEditor, flushEditors, todoCounts, dateDisplay, ondraft, onerror } = $props();
+  let { snapshot, completionTags, save, navigate, openLocations, registerEditor, waitForEditSaves, todoCounts, dateDisplay, ondraft, onerror } = $props();
   let activePanelId = $state(null);
   let preferenceQueue = Promise.resolve();
   let panelVersion = 0;
@@ -18,7 +18,7 @@
   function changePreference(fields) {
     // Keep pills enabled without losing rapid clicks or saving choices out of order.
     preferenceQueue = preferenceQueue.then(async () => {
-      await flushEditors();
+      await waitForEditSaves();
       await save('nearby-settings', ROOT_VIEW_ID, fields, false);
     }).catch(onerror);
     return preferenceQueue;
@@ -28,7 +28,7 @@
     const version = ++panelVersion;
     const closing = toggle && activePanelId === id;
     if (activePanelId === id && !closing) return;
-    await flushEditors();
+    await waitForEditSaves();
     if (version !== panelVersion || !rows.some(row => row.entity.id === id)) return;
     activePanelId = closing ? null : id;
   }

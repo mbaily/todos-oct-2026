@@ -285,7 +285,7 @@ test('JSON import previews/cancels/merges, validates before writing, paginates a
   await expect(page.getByRole('button', { name: 'Apply import', exact: true })).toBeDisabled();
 });
 
-test('nearby navigation saves drafts and returns through locations and Trash to the original list at phone width', async ({ page, request }) => {
+test('nearby navigation preserves saved edits and returns through locations and Trash to the original list at phone width', async ({ page, request }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const ids = Object.fromEntries(['book', 'folder', 'list', 'note'].map(key => [key, randomUUID()]));
   const text = `Navigation ${ids.note} #errand`;
@@ -305,6 +305,7 @@ test('nearby navigation saves drafts and returns through locations and Trash to 
   await note.locator('.entity-text').focus();
   await note.getByRole('button', { name: 'Edit', exact: true }).click();
   await note.getByRole('textbox', { name: 'Note text', exact: true }).fill(`${text} edited`);
+  await note.getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByRole('button', { name: 'Trash', exact: true }).click();
   await expect(page).toHaveURL(/#trash$/);
   await page.getByRole('button', { name: 'Back', exact: true }).click();
