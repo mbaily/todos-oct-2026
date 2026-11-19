@@ -590,6 +590,9 @@
       {#key currentId}
         <CreationForm bind:this={creationForm} parent={current} {completionTags} {save} onerror={showError}>
           {#snippet controlsToggle()}
+            {#if controlsHidden}
+              <button type="button" class="icon-button list-back-button" aria-label="Back" title="Back to folder" onclick={() => navigate(current.parentId)}>←</button>
+            {/if}
             {#if hideListControls}
               <button type="button" class="icon-button list-controls-toggle" bind:this={listControlsButton}
                 aria-label={controlsHidden ? 'Show controls' : 'Hide controls temporarily'}

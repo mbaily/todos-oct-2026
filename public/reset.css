@@ -84,6 +84,13 @@ button, input, select, textarea { font-family: inherit; }
 
 #creation form:has(textarea) input[type="radio"] { margin: 0; }
 
+@media (max-width: 380px) {
+  #creation form:has(> .list-back-button) { flex-wrap: nowrap; }
+  #creation form:has(> .list-back-button) > label { min-width: 0; }
+  #creation form:has(> .list-back-button) textarea { min-width: 0; max-width: 100%; }
+  #creation form:has(> .list-back-button) > button { flex-shrink: 0; }
+}
+
 button {
   background: transparent;
   color: inherit;

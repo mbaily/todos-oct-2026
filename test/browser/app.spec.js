@@ -2310,6 +2310,7 @@ test('the list layout checkbox hides controls and is copied on rollover', async 
     await expect(page.locator('#navigation')).toBeHidden();
     await expect(showControls).toBeInViewport();
     await expect(page.locator('#creation').getByRole('button', { name: 'Show controls', exact: true })).toBeVisible();
+    await expect(page.locator('#creation').getByRole('button', { name: 'Back', exact: true })).toBeVisible();
     await expect(draft).toHaveValue('Draft stays above the list');
     await expect(contents).toContainText('Layout todo 0');
     expect(await localEntity(page, source)).toHaveProperty('controlsBelow', true);
@@ -2319,6 +2320,7 @@ test('the list layout checkbox hides controls and is copied on rollover', async 
     await expect(hideTemporarily).toHaveAttribute('aria-expanded', 'true');
     await expect(page.locator('#breadcrumbs')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Back', exact: true })).toBeVisible();
+    await expect(page.locator('#creation').getByRole('button', { name: 'Back', exact: true })).toHaveCount(0);
     await search.fill('Layout todo 29');
     await expect(contents).not.toContainText('Layout todo 0');
     await hideTemporarily.click();
@@ -2345,7 +2347,7 @@ test('the list layout checkbox hides controls and is copied on rollover', async 
     await expect(page.locator('#navigation')).toBeHidden();
     await sync(page);
 
-    const saved = await browser.newPage();
+    const saved = await browser.newPage({ viewport: { width: 320, height: 640 }, isMobile: true, hasTouch: true });
     try {
       await saved.goto(page.url());
       const showSavedControls = saved.getByRole('button', { name: 'Show controls', exact: true });
@@ -2359,8 +2361,17 @@ test('the list layout checkbox hides controls and is copied on rollover', async 
       await sync(saved);
       await saved.goto(sourceUrl);
       await expect(showSavedControls).toBeVisible();
-      await showSavedControls.click();
-      await saved.getByRole('button', { name: 'Back', exact: true }).click();
+      const back = saved.locator('#creation').getByRole('button', { name: 'Back', exact: true });
+      const input = saved.getByRole('textbox', { name: 'New item', exact: true });
+      await expect(back).toBeInViewport();
+      await expect(showSavedControls).toBeInViewport();
+      const inputBox = await input.boundingBox();
+      for (const control of [back, showSavedControls]) {
+        const box = await control.boundingBox();
+        expect(box.y).toBeLessThan(inputBox.y + inputBox.height);
+        expect(box.y + box.height).toBeGreaterThan(inputBox.y);
+      }
+      await back.tap();
       await expect(saved).toHaveURL(`${url}/#entity/${folder}`);
       await expect(saved.locator('#navigation')).toBeVisible();
     } finally {
