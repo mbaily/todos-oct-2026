@@ -1,0 +1,7 @@
+# Add these routes inside your HTTPS site block. Apply your access policy
+# to the app route before proxying it.
+redir /todos /todos/?{query} 308
+
+handle_path /todos/* {
+	reverse_proxy 127.0.0.1:3000
+}

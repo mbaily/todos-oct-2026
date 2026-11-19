@@ -1,0 +1,70 @@
+Todo list apo
+
+
+Data
+------------------------
+
+
+Notebooks can contain folders
+folders can contain folders, lists
+lists can contain notes and todos
+notebooks, folders and lists have a name
+all entities have timestamps for creation and modificaiton
+notes have note text
+todos have todo text and checkbox
+lists have a completion checkbox
+you can edit a todo or note text using an expanding panel, it uses reactive JS to send back to server endpoint.
+you can edit notebook name or folder name also using an expanding panel.
+hashstags are parsed as part of the note text or todo text, or folder or notebook name
+
+all data is accessed locally inside the web browser so this is a local-first app. it uses indexedb for storage.
+the server storage is the source of truth and syncs to indexedb in a seperate thread to the browser UI.
+So if the browser UI user alters or creates or deletes something, it goes to indexedb first. But then it signals for the syncing thread to resync to server.
+
+Devise your own sync protocol for this.
+
+
+UI
+------------------------
+no css styling. no headings.
+
+Navigating starts from the list of notebooks.
+Only the list of notebooks is shown, one per line.
+
+Notebooks show the list of folders in them. Each folder has a unicode folder icon to the left of the name.
+
+You can drill down from notebook to folder to list. The list shows all the todos and notes in the list.
+
+Folders show the list of folders and lists in the folder. Folders have a unicode folder icon to the left. Lists have a list icon.
+
+There is completely plain text list with no styling and no page headings or margins at all. Just a pure list.
+
+By drill down I mean it works from a complelty new blank page and fills in from the selected entity only.
+You can navigate back up one level at a time. Because it's a local-first app, this uses JS to navigate and indexedb data.
+The notebook shows all the folders.
+The folders shows.
+no CSS styling. Each page is a pure list of the entity's contents, one per line.
+You can search from the browesr using the indexedb synced storage.
+
+use node and express.js
+use sqlite for database
+
+Questions
+------------------------
+1. **Users:** Is this a single-user app, potentially used across multiple browsers/devices, or should it support accounts and login?
+Single user  no accounts and login.
+
+2. **Contents:** Can lists contain both notes and todos? Can folders also contain notes and todos directly, as the data section says?
+yes lists can contain notes and todos. Folders cannot contain notes and todos directly. I've corrected the data section.
+
+3. **Plain UI:** Are ordinary browser buttons, checkboxes, inputs, and expanding editors acceptable? For “no margins,” may I use a minimal CSS reset to remove the browser’s default page margin?
+Yes ordinary browser buttons, checkboxes, inputs and expanidng editors are OK. Yes you can use a css reset.
+
+4. **Offline use:** Should the app reopen and work without a server connection after its first visit, or only continue working offline while already open?
+To start with no we do not require pure offline (no data connection).
+
+5. **Sync conflicts:** If two devices edit the same item offline, is “the last edit accepted by the server wins” acceptable, or should conflicting versions be preserved?
+last eidt accepted by the server wins is acceptable.
+
+6. **Deletion:** Should deleting a notebook, folder, or list delete everything inside it? Should there be confirmation or an undo option?
+deleting should go to trash. for now trash is invisible.

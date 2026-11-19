@@ -1,0 +1,14 @@
+{
+  "id": "./",
+  "name": "Todos",
+  "short_name": "Todos",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "theme_color": "#18181b",
+  "background_color": "#18181b",
+  "icons": [
+    { "src": "icons/todos-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/todos-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "locations": [
+    {
+      "id": "example-home",
+      "name": "Home (example)",
+      "latitude": -37.81,
+      "longitude": 144.96,
+      "userLocation": true
+    },
+    {
+      "id": "example-woolworths-01",
+      "name": "Example Woolworths branch #woolworths #supermarket",
+      "latitude": -37.82,
+      "longitude": 144.97,
+      "userLocation": false
+    },
+    {
+      "id": "example-woolworths-02",
+      "name": "Another example Woolworths branch #woolworths #supermarket",
+      "latitude": -37.80,
+      "longitude": 144.98,
+      "userLocation": false
+    },
+    {
+      "id": "example-coles-01",
+      "name": "Example Coles branch #coles #supermarket",
+      "latitude": -37.83,
+      "longitude": 144.95,
+      "userLocation": false
+    }
+  ]
+}

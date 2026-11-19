@@ -1,0 +1,38 @@
+# Both images must already exist locally. The handover tooling supplies full IDs
+# and invokes Podman with --pull=never --network=none.
+ARG BUILD_IMAGE
+ARG RUNTIME_IMAGE
+
+FROM ${BUILD_IMAGE} AS build
+WORKDIR /app
+
+# A different dependency set requires a newly prepared dependency image.
+COPY package.json package-lock.json /tmp/pkm-locked-inputs/
+RUN node --input-type=module -e "import fs from 'node:fs'; for (const name of ['package.json', 'package-lock.json']) { if (!fs.readFileSync('/app/' + name).equals(fs.readFileSync('/tmp/pkm-locked-inputs/' + name))) throw Error('Offline dependencies changed: ' + name + '. Prepare matching build images while connected.'); } fs.rmSync('/tmp/pkm-locked-inputs', {recursive:true});"
+
+COPY index.html vite.config.js server.js ./
+COPY public/ ./public/
+COPY src/ ./src/
+COPY server/ ./server/
+COPY test/ ./test/
+RUN npm test && npm prune --omit=dev --no-audit --no-fund
+
+FROM ${RUNTIME_IMAGE} AS runtime
+WORKDIR /app
+ENV NODE_ENV=production \
+    HOST=0.0.0.0 \
+    PORT=3000 \
+    DB_PATH=/data/todos.sqlite
+
+COPY --from=build /app/package.json /app/package-lock.json ./
+COPY --from=build /app/node_modules/ ./node_modules/
+COPY --from=build /app/dist/ ./dist/
+COPY --from=build /app/server/ ./server/
+COPY --from=build /app/src/lib/ ./src/lib/
+COPY --from=build /app/server.js ./
+
+RUN mkdir /data && chown node:node /data
+USER node
+EXPOSE 3000
+STOPSIGNAL SIGTERM
+CMD ["node", "server.js"]

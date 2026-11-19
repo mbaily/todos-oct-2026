@@ -1,0 +1,29 @@
+nearby errands page - icon to the right of the # for hashtags
+
+locations are stored in the sqlite3
+
+from nearby errands page, another page to edit locations
+
+Edit locations
+    add/delete locations using a similar style to the other UI in the app - expandable panels to delete, edit, etc
+
+    locations have a name + 0 or more hashtags in the name
+    locations can be defined by user using lat/long
+    locations have a boolean toggle for a user location or not
+
+Back in the nearby errands page:
+    user's current location - select current location from pills (names of locations with user location possible toggled on). Selected stored in sqlite3 and survives server reboot
+
+    Within n km - shows entities matching a location's hashtag if within n km of users's location. Use pills to select 2, 5, 10, 20km or "no filter" which shows reguardless of user's location
+
+    #errand is a special hashtag which matches any of the other entities with a hashtag #errand, no location match required
+
+    other matching entities match via hashtag matching a location's hashtag
+
+
+
+Question before we begin implementing: We need a way for a hashtag like #supermarket to match multiple actual supermarket locations. And a way for a user to import data like a JSON file or other for every supermarket in their area. Also a location can have 0 or more matching hashtags. So a woolworths supermarket location in lat and long also has hashtags #woolworths and #supermarket so it matches both.
+We can export to JSON the user's locations or import from JSON
+The list of locations could be large - maybe hundreds of lcations for retail chains, supermarkets, etc.
+
+Are there any more questions reguarding how this can work? Or any gaps you can identify in the logic for this?

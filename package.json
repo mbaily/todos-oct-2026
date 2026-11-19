@@ -1,0 +1,33 @@
+{
+  "name": "todos_oct_2026",
+  "version": "1.0.7",
+  "description": "Plain Svelte 5 local-first todo app with IndexedDB, background sync, Express and SQLite",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.14.1 <25"
+  },
+  "scripts": {
+    "build": "vite build",
+    "start": "npm run build && node server.js",
+    "dev": "node --watch server.js --dev",
+    "test": "npm run build && node --test test/*.test.js",
+    "test:browser": "npm run build && playwright test",
+    "check": "npm test && playwright test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^5.2.1",
+    "linkify-it": "^6.1.0",
+    "svelte": "^5.57.1",
+    "ws": "^8.23.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "fake-indexeddb": "^6.2.5",
+    "vite": "^8.3.3"
+  }
+}

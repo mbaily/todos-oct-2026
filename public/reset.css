@@ -1,0 +1,148 @@
+/* Keep the plain list layout, with a dark canvas and native dark controls. */
+:root {
+  --page-background: #000000;
+  font-family: system-ui, sans-serif;
+  font-size: 125%;
+  color-scheme: dark;
+  background-color: var(--page-background);
+  color: #e6e6e6;
+}
+
+body { margin: 0; }
+
+button, input, select, textarea { font-family: inherit; }
+
+#standalone-status-bar-background { display: none; }
+
+@media (display-mode: standalone) {
+  @supports (-webkit-touch-callout: none) and (background-clip: text) {
+    /* WebKit samples fixed backgrounds thicker than 10px at the top edge.
+       Clip to empty text so the background paints nothing over the first row. */
+    #standalone-status-bar-background {
+      display: block;
+      position: fixed;
+      inset: 0 0 auto;
+      z-index: 1;
+      height: 11px;
+      background-color: var(--page-background);
+      background-clip: text;
+      pointer-events: none;
+    }
+  }
+}
+
+.completed-todo { text-decoration: line-through; }
+.text-url { overflow-wrap: anywhere; }
+.text-hashtag { color: #93c5fd; overflow-wrap: anywhere; }
+.list-todo-count {
+  font-family: "Noto Sans CJK SC", "Noto Sans CJK JP", "PingFang SC", "Apple SD Gothic Neo", "Hiragino Sans", "Meiryo", "Microsoft YaHei", "WenQuanYi Zen Hei", "FreeSans", sans-serif;
+}
+
+.entity-text:focus { outline: none; }
+
+.leaf-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1.5em minmax(0, 1fr);
+  align-items: first baseline;
+}
+.leaf-row > input[type="checkbox"] { margin: 0; justify-self: center; }
+.leaf-row > .entity-text { grid-column: 2; min-width: 0; text-align: left; overflow-wrap: anywhere; }
+.leaf-row .entity-marker { position: absolute; left: 0; top: 0; width: 1.5em; text-align: center; }
+.leaf-row > .entity-panel { grid-column: 1 / -1; }
+
+.entity-editor {
+  box-sizing: border-box;
+  max-width: 100%;
+}
+
+@media (any-pointer: coarse) {
+  /* iOS zooms to make small text fields readable when they receive focus. */
+  input:not([type]),
+  input:is([type="text"], [type="search"], [type="number"]),
+  textarea {
+    box-sizing: border-box;
+    max-width: 100%;
+    font-size: max(16px, 0.8rem);
+  }
+}
+
+#creation form:has(textarea) {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+#creation form:has(textarea) > label,
+#creation form:has(textarea) [role="radiogroup"],
+#creation form:has(textarea) [role="radiogroup"] > label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+#creation form:has(textarea) input[type="radio"] { margin: 0; }
+
+button {
+  background: transparent;
+  color: inherit;
+  border: 1px solid #555;
+}
+
+button:hover { border-color: #999; }
+button:disabled { color: #777; }
+button.pin-button[aria-pressed="false"] { opacity: 0.5; }
+
+.pill-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+button.pill { border-radius: 999px; padding: 2px 10px; max-width: 100%; overflow-wrap: anywhere; }
+button.pill[aria-pressed="true"] { background: #333; border-color: #ccc; }
+.hashtag-suggestions {
+  position: fixed;
+  z-index: 2;
+  visibility: hidden;
+  box-sizing: border-box;
+  width: max-content;
+  max-height: min(8rem, var(--suggestion-space, 0px));
+  overflow: auto;
+  overscroll-behavior: contain;
+  align-content: flex-start;
+  padding: 4px;
+  border: 1px solid #555;
+  background: var(--page-background);
+}
+button.location-name { border: 0; padding: 0; text-align: left; font: inherit; max-width: 100%; overflow-wrap: anywhere; }
+.location-form input[type="number"] { width: 10em; max-width: 100%; }
+.nearby-row { margin-top: 4px; overflow-wrap: anywhere; }
+.import-preview-row { overflow-wrap: anywhere; }
+
+button.icon-button {
+  box-sizing: border-box;
+  border: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  line-height: 1;
+}
+
+@media (pointer: coarse) {
+  #creation form:has(textarea) > button[type="submit"] { display: none; }
+  .hashtag-suggestions .pill { min-height: 32px; }
+
+  #breadcrumbs > button.icon-button {
+    width: 48px;
+    height: 48px;
+    font-size: 1.2rem;
+  }
+
+  button.icon-button[aria-label="Back"],
+  button.icon-button[aria-label="Undo"] {
+    width: 48px;
+    height: 48px;
+    font-size: 2em;
+  }
+}
