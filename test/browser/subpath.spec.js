@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
+import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { createApp } from '../../server/app.js';
 import { createStore } from '../../server/store.js';
@@ -117,6 +118,83 @@ test('Todos can reopen offline, edit local data, and sync after reconnecting', a
   await expect(reopenedStatus).toHaveAttribute('title', 'Service worker active');
   await expect(reopenedStatus).toHaveCSS('background-color', 'rgb(74, 222, 128)');
   await expect.poll(serverName).toBe(updated);
+});
+
+test('normal reloads pick up a new deployment with another tab open and still work offline', async ({ page, context }) => {
+  const index = await readFile(new URL('../../dist/index.html', import.meta.url), 'utf8');
+  const legacyWorker = `
+    const entry = new URL('index.html', self.registration.scope).href;
+    const cacheName = 'todos-pwa:' + encodeURIComponent(self.registration.scope) + ':legacy';
+    self.addEventListener('install', event => {
+      event.waitUntil(caches.open(cacheName).then(cache => cache.add(entry)));
+    });
+    self.addEventListener('activate', event => event.waitUntil(self.clients.claim()));
+    self.addEventListener('fetch', event => {
+      if (event.request.mode === 'navigate') {
+        event.respondWith(caches.match(entry, { cacheName }));
+      }
+    });
+  `;
+  let deployment = 'old';
+  let pageAvailable = true;
+  const store = createStore(':memory:');
+  const app = createApp(store);
+  const server = await startSyncServer((request, response) => {
+    const pathname = new URL(request.url, 'http://localhost').pathname;
+    if (pathname === '/' || pathname === '/index.html') {
+      if (!pageAvailable) {
+        response.writeHead(503).end();
+        return;
+      }
+      response.writeHead(200, { 'Content-Type': 'text/html', 'Cache-Control': 'no-store' })
+        .end(index.replace('<head>', `<head><meta name="deployment" content="${deployment}">`));
+      return;
+    }
+    if (pathname === '/sw.js' && deployment === 'old') {
+      response.writeHead(200, { 'Content-Type': 'text/javascript', 'Cache-Control': 'no-store' }).end(legacyWorker);
+      return;
+    }
+    app(request, response);
+  });
+  const other = await context.newPage();
+  try {
+    const marker = current => current.locator('meta[name="deployment"]');
+    await page.goto(server.url);
+    await expect(page.locator('#service-worker-status')).toHaveAttribute('data-state', 'active');
+    await other.goto(server.url);
+    const previousWorker = await other.evaluateHandle(() => navigator.serviceWorker.controller);
+    try {
+      await expect(marker(other)).toHaveAttribute('content', 'old');
+      deployment = 'updated';
+      await page.reload();
+      await expect.poll(() => other.evaluate(previous => {
+        const active = navigator.serviceWorker.controller;
+        return active !== null && active !== previous && active.state === 'activated';
+      }, previousWorker)).toBe(true);
+      await expect(marker(other)).toHaveAttribute('content', 'old');
+    } finally {
+      await previousWorker.dispose();
+    }
+
+    await page.reload();
+    await expect(marker(page)).toHaveAttribute('content', 'updated');
+    deployment = 'latest';
+    await page.reload();
+    await expect(marker(page)).toHaveAttribute('content', 'latest');
+    pageAvailable = false;
+    await page.reload();
+    await expect(marker(page)).toHaveAttribute('content', 'updated');
+    await context.setOffline(true);
+    await page.reload();
+    await expect(marker(page)).toHaveAttribute('content', 'updated');
+    await expect(page.getByRole('textbox', { name: 'New notebook' })).toBeVisible();
+  } finally {
+    await context.setOffline(false);
+    await other.close();
+    await page.close();
+    await server.close();
+    store.close();
+  }
 });
 
 test('the offline status stays green when a hard reload bypasses an active service worker', async ({ page, context }) => {
