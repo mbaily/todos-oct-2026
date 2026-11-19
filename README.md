@@ -111,6 +111,8 @@ Inside a list, open **⋯** beside **↶ Undo** and choose **Move items to next 
 
 The move leaves you on the source list with an **Open list** shortcut. One **Undo** returns the moved items and removes the newly created destination from the folder if it is empty.
 
+In the same **⋯** menu, **Move controls below the list** keeps the new-item row at the top while placing the rest of the controls after the items. The navigation row stays reachable at the bottom of the screen. The checkbox syncs per list, and moving items copies its current value to the destination list.
+
 ## Sync protocol
 
 1. A UI mutation atomically updates the local `entities` projection and appends a mutation to the IndexedDB `outbox`. Each mutation has a UUID operation ID; a creation also has a UUID entity ID. Updates contain only changed fields, so a text edit does not overwrite a checkbox change.

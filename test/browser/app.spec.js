@@ -2253,6 +2253,80 @@ test.describe('hashtag completion', () => {
   });
 });
 
+test('the list layout checkbox reorders controls offline and is copied on rollover', async ({ page, context, request, browser }) => {
+  await page.setViewportSize({ width: 390, height: 360 });
+  const [book, folder, source, otherList] = Array.from({ length: 4 }, () => crypto.randomUUID());
+  const todoIds = Array.from({ length: 30 }, () => crypto.randomUUID());
+  const create = (id, type, parentId, fields) => ({
+    opId: crypto.randomUUID(), action: 'create', id, fields: { type, parentId, ...fields },
+  });
+  const seeded = await request.post('/api/sync', { data: { cursor: 0, mutations: [
+    create(book, 'notebook', null, { name: 'Layout notebook' }),
+    create(folder, 'folder', book, { name: 'Layout folder' }),
+    create(source, 'list', folder, { name: 'Layout 20/11/2026' }),
+    create(otherList, 'list', folder, { name: 'Unrelated list' }),
+    ...todoIds.map((id, index) => create(id, 'todo', source, { text: `Layout todo ${index}` })),
+    { opId: crypto.randomUUID(), action: 'update', id: todoIds[0], fields: { pinned: true, favourite: true } },
+  ] } });
+  expect((await seeded.json()).acknowledgements.every(receipt => receipt.accepted)).toBe(true);
+
+  const sourceUrl = `/#entity/${source}`;
+  await page.goto(sourceUrl);
+  await expect(page.locator('#contents')).toContainText('Layout todo 0');
+  await sync(page);
+  const actions = page.getByLabel('List actions', { exact: true });
+  const layout = page.getByRole('checkbox', { name: 'Move controls below the list', exact: true });
+  const draft = page.getByRole('textbox', { name: 'New item', exact: true });
+  await draft.fill('Draft stays above the list');
+  await context.setOffline(true);
+  await actions.click();
+  await expect(layout).not.toBeChecked();
+  await layout.check();
+  await expect(page.locator('#controls + #contents')).toHaveCount(1);
+  await expect(page.locator('#contents ~ #pinned')).toBeVisible();
+  await expect(page.locator('#contents ~ #favourites')).toBeVisible();
+  await expect(page.locator('#contents ~ #breadcrumbs')).toBeVisible();
+  await expect(page.locator('#contents ~ div #search')).toBeVisible();
+  await expect(page.locator('#contents ~ #navigation')).toBeVisible();
+  await expect(draft).toHaveValue('Draft stays above the list');
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(actions).toBeInViewport();
+  await expect(page.getByRole('button', { name: 'Back', exact: true })).toBeInViewport();
+  expect(await localEntity(page, source)).toHaveProperty('controlsBelow', true);
+  expect(await localEntity(page, otherList)).not.toHaveProperty('controlsBelow');
+
+  await context.setOffline(false);
+  await sync(page);
+  await page.reload();
+  await expect(page.locator('#contents ~ #navigation')).toBeVisible();
+  await actions.click();
+  await expect(layout).toBeChecked();
+  await page.getByRole('button', { name: 'Move items to next day / list', exact: true }).click();
+  await page.getByRole('button', { name: 'Create list and move 30 items', exact: true }).click();
+  await page.getByRole('button', { name: 'Open list', exact: true }).click();
+  const destination = (await localEntity(page, todoIds[0])).parentId;
+  await expect(page).toHaveURL(`/#entity/${destination}`);
+  await expect(page.locator('#contents ~ #navigation')).toBeVisible();
+  await sync(page);
+
+  const saved = await browser.newPage();
+  try {
+    await saved.goto(page.url());
+    await expect(saved.locator('#contents ~ #navigation')).toBeVisible();
+    await saved.getByLabel('List actions', { exact: true }).click();
+    await saved.getByRole('checkbox', { name: 'Move controls below the list', exact: true }).uncheck();
+    await expect(saved.locator('#navigation + #contents')).toHaveCount(1);
+    await sync(saved);
+    await saved.goto(sourceUrl);
+    await expect(saved.locator('#contents ~ #navigation')).toBeVisible();
+    await saved.getByRole('button', { name: 'Back', exact: true }).click();
+    await expect(saved).toHaveURL(`/#entity/${folder}`);
+    await expect(saved.locator('#navigation + #contents')).toHaveCount(1);
+  } finally {
+    await saved.close();
+  }
+});
+
 test('the list menu moves items offline and Undo returns them as a group', async ({ page, context, request }) => {
   const [book, folder, source, target, todo, done, note] = Array.from({ length: 7 }, () => crypto.randomUUID());
   const create = (id, type, parentId, fields) => ({

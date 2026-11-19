@@ -67,13 +67,13 @@ export function validateMutation(mutation) {
     }
   }
   if (locationActions.has(mutation.action)) { validateLocationMutation(mutation); return; }
-  if (!['create', 'update', 'trash', 'sort', 'restore', 'date-display', 'hashtag-completion-settings', 'move-items'].includes(mutation.action)) throw new Error('Invalid action.');
+  if (!['create', 'update', 'trash', 'sort', 'restore', 'date-display', 'hashtag-completion-settings', 'list-layout', 'move-items'].includes(mutation.action)) throw new Error('Invalid action.');
   if (mutation.action === 'trash') return;
   const fields = mutation.fields;
   if (!fields || typeof fields !== 'object' || Array.isArray(fields)) throw new Error('Invalid fields.');
   if (mutation.action === 'move-items') {
     const { destinationId, itemIds, newListName, removeSourceCreatedBy } = fields;
-    if (Object.keys(fields).some(key => !['destinationId', 'itemIds', 'newListName', 'removeSourceCreatedBy'].includes(key)) ||
+    if (Object.keys(fields).some(key => !['destinationId', 'itemIds', 'newListName', 'removeSourceCreatedBy', 'copyLayout'].includes(key)) ||
         !validId(destinationId) || destinationId === mutation.id ||
         !Array.isArray(itemIds) || itemIds.length === 0 || !itemIds.every(validId) || new Set(itemIds).size !== itemIds.length) {
       throw new Error('Choose a different list and at least one item to move.');
@@ -84,6 +84,15 @@ export function validateMutation(mutation) {
     }
     if (Object.hasOwn(fields, 'removeSourceCreatedBy') && (!validId(removeSourceCreatedBy) || newListName !== undefined)) {
       throw new Error('Invalid list move to undo.');
+    }
+    if (Object.hasOwn(fields, 'copyLayout') && (fields.copyLayout !== true || removeSourceCreatedBy !== undefined)) {
+      throw new Error('Invalid list layout copy.');
+    }
+    return;
+  }
+  if (mutation.action === 'list-layout') {
+    if (Object.keys(fields).length !== 1 || !Object.hasOwn(fields, 'controlsBelow') || typeof fields.controlsBelow !== 'boolean') {
+      throw new Error('Invalid list layout.');
     }
     return;
   }
@@ -171,7 +180,12 @@ function applyItemMove(entities, mutation, timestamp) {
       action: 'create', id: destinationId, opId,
       fields: { type: 'list', parentId: source.parentId, name: newListName.trim() },
     }, timestamp);
-    changed.push({ ...destination, createdByMove: opId });
+    changed.push({
+      ...destination, createdByMove: opId,
+      ...(fields.copyLayout ? { controlsBelow: source.controlsBelow === true } : {}),
+    });
+  } else if (fields.copyLayout && (destination.controlsBelow === true) !== (source.controlsBelow === true)) {
+    changed.push({ ...destination, controlsBelow: source.controlsBelow === true });
   }
   changed.push(...moving);
   if (removeSourceCreatedBy && source.createdByMove === removeSourceCreatedBy && !source.deletedAt) {
@@ -190,6 +204,12 @@ export function applyMutation(entities, mutation, timestamp) {
   if (mutation.action === 'move-items') return applyItemMove(entities, mutation, timestamp);
   const current = entities.get(mutation.id);
   if (current?.type === 'location') throw new Error('Use location actions for locations.');
+  if (mutation.action === 'list-layout') {
+    if (current?.type !== 'list' || current.deletedAt) throw new Error('Only available lists have a layout setting.');
+    const list = { ...current, controlsBelow: mutation.fields.controlsBelow };
+    entities.set(list.id, list);
+    return [list];
+  }
   if (mutation.action === 'hashtag-completion-settings') {
     const settings = { ...(current ?? { id: ROOT_VIEW_ID, type: 'view-settings', parentId: null }), ...mutation.fields };
     entities.set(ROOT_VIEW_ID, settings);

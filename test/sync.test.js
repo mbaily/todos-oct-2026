@@ -59,6 +59,31 @@ test('retry after a lost response is idempotent; later accepted field patches wi
   assert.throws(() => store.sync({ cursor: 0, mutations: [{ ...firstEdit, fields: { name: 'Reused ID' } }] }), /cannot be reused/);
 });
 
+test('list layout persists in SQLite and a move copies it independently to an existing list', t => {
+  const directory = mkdtempSync(path.join(tmpdir(), 'todos-list-layout-'));
+  const filename = path.join(directory, 'todos.sqlite');
+  let store = createStore(filename);
+  t.after(() => { store.close(); rmSync(directory, { recursive: true, force: true }); });
+  const { nested, list, todo, note, response } = tree(store);
+  const target = create('list', nested.id, 'Destination');
+  const layout = (id, controlsBelow) => mutation('list-layout', id, { controlsBelow });
+  const before = response.changes.find(change => change.entity.id === list.id).entity;
+  const saved = store.sync({ cursor: response.cursor, mutations: [
+    target, layout(note.id, true), layout(list.id, true),
+    mutation('move-items', list.id, { destinationId: target.id, itemIds: [todo.id], copyLayout: true }),
+    layout(list.id, false),
+  ] });
+  assert.deepEqual(saved.acknowledgements.map(receipt => receipt.accepted), [true, false, true, true, true]);
+  store.close();
+  store = createStore(filename);
+  const entity = id => JSON.parse(store.db.prepare('SELECT data FROM entities WHERE id = ?').get(id).data);
+  assert.equal(entity(list.id).controlsBelow, false);
+  assert.equal(entity(list.id).modifiedAt, before.modifiedAt);
+  assert.equal(entity(target.id).controlsBelow, true);
+  assert.equal(entity(todo.id).parentId, target.id);
+  assert.throws(() => store.sync({ cursor: 0, mutations: [layout(list.id, 'yes')] }), /Invalid list layout/);
+});
+
 test('moves validate the full selection and Undo keeps a destination containing other work', t => {
   const store = createStore(':memory:');
   t.after(() => store.close());
