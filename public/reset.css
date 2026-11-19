@@ -84,6 +84,23 @@ button, input, select, textarea { font-family: inherit; }
 
 #creation form:has(textarea) input[type="radio"] { margin: 0; }
 
+#creation form:has(> .hashtag-suggestions) {
+  display: grid;
+  grid-template-columns: max-content minmax(0, max-content);
+  grid-auto-columns: max-content;
+  grid-auto-flow: column;
+  align-items: center;
+  gap: 4px;
+}
+
+#creation form:has(> .hashtag-suggestions) > :not(.hashtag-suggestions) { grid-row: 1; }
+#creation form:has(> .hashtag-suggestions) > label > :is(input, textarea) {
+  box-sizing: border-box;
+  display: block;
+  max-width: 100%;
+}
+#creation form > .hashtag-suggestions { grid-area: 2 / 2; }
+
 @media (max-width: 380px) {
   #creation form:has(> .list-back-button) { flex-wrap: nowrap; }
   #creation form:has(> .list-back-button) > label { min-width: 0; }
@@ -105,18 +122,10 @@ button.pin-button[aria-pressed="false"] { opacity: 0.5; }
 button.pill { border-radius: 999px; padding: 2px 10px; max-width: 100%; overflow-wrap: anywhere; }
 button.pill[aria-pressed="true"] { background: #333; border-color: #ccc; }
 .hashtag-suggestions {
-  position: fixed;
-  z-index: 2;
-  visibility: hidden;
-  box-sizing: border-box;
-  width: max-content;
-  max-height: min(8rem, var(--suggestion-space, 0px));
-  overflow: auto;
-  overscroll-behavior: contain;
-  align-content: flex-start;
-  padding: 4px;
+  contain: inline-size;
 }
-.hashtag-suggestions .pill { background: var(--page-background); }
+.edit-field .hashtag-suggestions { margin-top: 4px; }
+.hashtag-suggestions .pill { min-inline-size: 0; }
 button.location-name { border: 0; padding: 0; text-align: left; font: inherit; max-width: 100%; overflow-wrap: anywhere; }
 .location-form input[type="number"] { width: 10em; max-width: 100%; }
 .nearby-row { margin-top: 4px; overflow-wrap: anywhere; }

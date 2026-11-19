@@ -18,7 +18,6 @@
   let editError = $state('');
   let saving = $state(false);
   let editor = $state();
-  let rowText = $state();
   let editButton = $state();
   let pendingSave;
   let pointerFocusing = false;
@@ -146,18 +145,20 @@
 
 {#snippet editPanel()}
     <div id={`editor-${entity.id}`}>
-      {#if named}
-        <input class="entity-editor" size="60" bind:this={editor} value={draft} maxlength="100000" aria-label="Name" enterkeyhint="done" readonly={saving}
-          onkeydown={enter.onkeydown} onbeforeinput={enter.onbeforeinput} oninput={enter.oninput}
-          onkeyup={enter.onkeyup} oncompositionstart={enter.oncompositionstart} oncompositionend={enter.oncompositionend} />
-      {:else}
-        <textarea class="entity-editor" cols="60" bind:this={editor} value={draft} maxlength="100000" aria-label={entity.type === 'todo' ? 'Todo text' : 'Note text'} enterkeyhint="done" readonly={saving}
-          onkeydown={enter.onkeydown} onbeforeinput={enter.onbeforeinput} oninput={enter.oninput}
-          onkeyup={enter.onkeyup} oncompositionstart={enter.oncompositionstart} oncompositionend={enter.oncompositionend}></textarea>
-      {/if}
-      {#if editor && (!named || entity.type === 'list')}
-        <HashtagSuggestions textbox={editor} anchor={rowText} value={draft} tags={completionTags} />
-      {/if}
+      <div class="edit-field">
+        {#if named}
+          <input class="entity-editor" size="60" bind:this={editor} value={draft} maxlength="100000" aria-label="Name" enterkeyhint="done" readonly={saving}
+            onkeydown={enter.onkeydown} onbeforeinput={enter.onbeforeinput} oninput={enter.oninput}
+            onkeyup={enter.onkeyup} oncompositionstart={enter.oncompositionstart} oncompositionend={enter.oncompositionend} />
+        {:else}
+          <textarea class="entity-editor" cols="60" bind:this={editor} value={draft} maxlength="100000" aria-label={entity.type === 'todo' ? 'Todo text' : 'Note text'} enterkeyhint="done" readonly={saving}
+            onkeydown={enter.onkeydown} onbeforeinput={enter.onbeforeinput} oninput={enter.oninput}
+            onkeyup={enter.onkeyup} oncompositionstart={enter.oncompositionstart} oncompositionend={enter.oncompositionend}></textarea>
+        {/if}
+        {#if editor && (!named || entity.type === 'list')}
+          <HashtagSuggestions textbox={editor} value={draft} tags={completionTags} />
+        {/if}
+      </div>
       {#if editError}<span role="alert">{editError}</span>{/if}
       <button type="button" disabled={saving} onclick={saveEdit}>Save</button>
       <button type="button" class="icon-button" aria-label="Close" title="Discard edit" disabled={saving} onclick={closeEditor}>×</button>
@@ -180,7 +181,7 @@
     <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-    <span class="entity-text" class:completed-todo={entity.type === 'todo' && entity.checked} bind:this={rowText} title={timestamps}
+    <span class="entity-text" class:completed-todo={entity.type === 'todo' && entity.checked} title={timestamps}
       tabindex="0" role="group" aria-label={entity.type === 'todo' ? 'Todo text' : 'Note text'} aria-controls={`actions-${entity.id}`}
       onfocus={focusActions} onpointerdown={handlePointerDown} onclick={handleClick}>{#if icon}<span class="entity-marker">{icon}</span>{/if}<EntityDate {entity} mode={dateDisplay} />{#if linkOnlyTodo}<span class="link-marker">🔗 </span>{/if}<LinkifiedText text={label} completed={entity.type === 'todo' && entity.checked} /></span>
     {#if panelOpen}
@@ -191,3 +192,12 @@
     {/if}
   {/if}
 </div>
+
+<style>
+  .edit-field {
+    display: inline-block;
+    max-inline-size: 100%;
+    vertical-align: top;
+  }
+  .edit-field > .entity-editor { display: block; }
+</style>

@@ -2077,8 +2077,10 @@ test.describe('hashtag completion', () => {
     await creation.pressSequentially('ills-s');
     await expect(suggestions.getByRole('button')).toHaveText(['#pills-supermarket', '#pills-supper']);
     const fieldBox = await creation.boundingBox();
-    const pillBox = await pill('#pills-supper').boundingBox();
-    expect(pillBox.y).toBeGreaterThanOrEqual(fieldBox.y + fieldBox.height);
+    const suggestionBox = await suggestions.boundingBox();
+    expect(suggestionBox.x).toBeCloseTo(fieldBox.x, 1);
+    expect(suggestionBox.width).toBeCloseTo(fieldBox.width, 1);
+    expect(suggestionBox.y).toBeGreaterThanOrEqual(fieldBox.y + fieldBox.height);
     await pill('#pills-supper').tap();
     await expect(creation).toHaveValue('Weekend #pills-supper ');
     await expect(creation).toBeFocused();
@@ -2149,11 +2151,12 @@ test.describe('hashtag completion', () => {
     });
   });
 
-  test('changing suggestions keeps the page and the focused textbox in place', async ({ page, request }) => {
+  test('suggestion pills flow beneath create and edit fields, including long tags', async ({ page, request }) => {
     const bookId = crypto.randomUUID();
     const folderId = crypto.randomUUID();
     const listId = crypto.randomUUID();
-    const prefix = `layout-${listId.slice(0, 8)}`;
+    const prefix = `l${listId.slice(0, 3)}`;
+    const longTag = `#${prefix}-${'wrapped'.repeat(15)}`;
     const mutation = (id, fields) => ({ opId: crypto.randomUUID(), action: 'create', id, fields });
     const seeded = await request.post('/api/sync', { data: { cursor: 0, mutations: [
       mutation(bookId, { type: 'notebook', parentId: null, name: 'Suggestion layout notebook' }),
@@ -2162,6 +2165,7 @@ test.describe('hashtag completion', () => {
       ...Array.from({ length: 40 }, (_, index) => mutation(crypto.randomUUID(), {
         type: 'todo', parentId: listId, text: `Todo ${index} #${prefix}-${index}`,
       })),
+      mutation(crypto.randomUUID(), { type: 'todo', parentId: listId, text: `Long hashtag ${longTag}` }),
     ] } });
     expect((await seeded.json()).acknowledgements.every(receipt => receipt.accepted)).toBe(true);
     await page.setViewportSize({ width: 390, height: 480 });
@@ -2169,41 +2173,61 @@ test.describe('hashtag completion', () => {
 
     const suggestions = page.getByRole('group', { name: 'Hashtag suggestions' });
     const matchingPills = suggestions.getByRole('button', { name: new RegExp(`^#${prefix}-`) });
-    const layout = field => field.evaluate(input => {
-      const { top, left, width, height } = input.getBoundingClientRect();
-      return { top, left, width, height, scrollY: window.scrollY, pageHeight: document.scrollingElement.scrollHeight };
-    });
+    const pageHeight = () => page.evaluate(() => document.scrollingElement.scrollHeight);
 
     async function verifyLayout(field) {
       await field.fill('Keep #');
       await expect(suggestions).toHaveCount(0);
-      const before = await layout(field);
+      const before = await pageHeight();
       await field.pressSequentially(`${prefix}-`);
-      await expect(matchingPills).toHaveCount(40);
-      await expect.poll(() => layout(field)).toEqual(before);
+      await expect(matchingPills).toHaveCount(41);
+      await expect(field).toBeFocused();
+      const fieldBox = await field.boundingBox();
+      const groupBox = await suggestions.boundingBox();
+      expect(groupBox.x).toBeCloseTo(fieldBox.x, 1);
+      expect(groupBox.width).toBeCloseTo(fieldBox.width, 1);
+      expect(groupBox.y).toBeGreaterThanOrEqual(fieldBox.y + fieldBox.height);
+      expect(await pageHeight()).toBeGreaterThan(before);
+
+      const first = await matchingPills.first().boundingBox();
+      const second = await matchingPills.nth(1).boundingBox();
+      const last = await matchingPills.last().boundingBox();
+      expect(second.y).toBeCloseTo(first.y, 1);
+      expect(second.x).toBeGreaterThan(first.x);
+      expect(last.y).toBeGreaterThan(first.y + first.height);
+      expect(last.x + last.width).toBeLessThanOrEqual(groupBox.x + groupBox.width);
+      expect(last.height).toBeGreaterThan(first.height);
+      expect(groupBox.y + groupBox.height).toBeCloseTo(last.y + last.height, 1);
+
       await field.pressSequentially('39');
       await expect(matchingPills).toHaveCount(1);
-      await expect(matchingPills).toBeInViewport();
-      await expect.poll(() => layout(field)).toEqual(before);
       await field.press('Space');
       await expect(suggestions).toHaveCount(0);
       await expect(field).toBeFocused();
-      await expect.poll(() => layout(field)).toEqual(before);
+      expect(await pageHeight()).toBe(before);
       await field.press('Backspace');
       await expect(matchingPills).toHaveCount(1);
       await matchingPills.tap();
       await expect(field).toHaveValue(`Keep #${prefix}-39 `);
       await expect(suggestions).toHaveCount(0);
       await expect(field).toBeFocused();
-      await expect.poll(() => layout(field)).toEqual(before);
+      expect(await pageHeight()).toBe(before);
     }
 
-    await verifyLayout(page.locator('#creation').getByRole('textbox'));
+    const creation = page.locator('#creation').getByRole('textbox');
+    await verifyLayout(creation);
+    await creation.fill(`Keep #${prefix}-39`);
+    await expect(matchingPills).toHaveCount(1);
+    const checkbox = page.locator('#contents > [data-id]').first().getByRole('checkbox');
+    await checkbox.tap();
+    await expect(checkbox).toBeChecked();
+    await expect(suggestions).toHaveCount(0);
+    await expect(creation).toHaveValue(`Keep #${prefix}-39`);
+
     const target = page.locator('#contents > [data-id]').nth(20);
     await clickAction(target, 'Edit');
     const editor = target.getByRole('textbox', { name: 'Todo text' });
     await editor.evaluate(field => window.scrollBy(0, field.getBoundingClientRect().bottom - (innerHeight - 45)));
-    expect((await layout(editor)).scrollY).toBeGreaterThan(0);
     await verifyLayout(editor);
   });
 
