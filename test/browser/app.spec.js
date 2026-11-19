@@ -2258,7 +2258,7 @@ test.describe('hashtag completion', () => {
   });
 });
 
-test('the list layout checkbox reorders controls offline and is copied on rollover', async ({ page, context, browser }) => {
+test('the list layout checkbox hides controls and is copied on rollover', async ({ page, context, browser }) => {
   const server = createServer();
   const events = createSyncEvents(server);
   const store = createStore(':memory:', { onChange: events.notify });
@@ -2289,53 +2289,80 @@ test('the list layout checkbox reorders controls offline and is copied on rollov
     await expect(page.locator('#contents')).toContainText('Layout todo 0');
     await sync(page);
     const actions = page.getByLabel('List actions', { exact: true });
-    const layout = page.getByRole('checkbox', { name: 'Move controls below the list', exact: true });
+    const layout = page.getByRole('checkbox', { name: 'Hide controls', exact: true });
+    const showControls = page.getByRole('button', { name: 'Show controls', exact: true });
+    const hideTemporarily = page.getByRole('button', { name: 'Hide controls temporarily', exact: true });
+    const moveAction = page.getByRole('button', { name: 'Move items to next day / list', exact: true });
+    const contents = page.locator('#contents');
+    const search = page.getByRole('searchbox', { name: 'Search', exact: true });
     const draft = page.getByRole('textbox', { name: 'New item', exact: true });
     await draft.fill('Draft stays above the list');
     await context.setOffline(true);
     await actions.click();
     await expect(layout).not.toBeChecked();
+    const moveFontSize = await moveAction.evaluate(element => getComputedStyle(element).fontSize);
+    await expect(page.locator('.list-actions-panel label')).toHaveCSS('font-size', moveFontSize);
     await layout.check();
-    await expect(page.locator('#controls + #contents')).toHaveCount(1);
-    await expect(page.locator('#contents ~ #pinned')).toBeVisible();
-    await expect(page.locator('#contents ~ #favourites')).toBeVisible();
-    await expect(page.locator('#contents ~ #breadcrumbs')).toBeVisible();
-    await expect(page.locator('#contents ~ div #search')).toBeVisible();
-    await expect(page.locator('#contents ~ #navigation')).toBeVisible();
+    await expect(page.locator('#pinned')).toBeHidden();
+    await expect(page.locator('#favourites')).toBeHidden();
+    await expect(page.locator('#breadcrumbs')).toBeHidden();
+    await expect(page.locator('#search')).toBeHidden();
+    await expect(page.locator('#navigation')).toBeHidden();
+    await expect(showControls).toBeInViewport();
+    await expect(page.locator('#creation').getByRole('button', { name: 'Show controls', exact: true })).toBeVisible();
     await expect(draft).toHaveValue('Draft stays above the list');
-    await page.evaluate(() => window.scrollTo(0, 0));
-    await expect(actions).toBeInViewport();
-    await expect(page.getByRole('button', { name: 'Back', exact: true })).toBeInViewport();
+    await expect(contents).toContainText('Layout todo 0');
     expect(await localEntity(page, source)).toHaveProperty('controlsBelow', true);
     expect(await localEntity(page, otherList)).not.toHaveProperty('controlsBelow');
+
+    await showControls.click();
+    await expect(hideTemporarily).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.locator('#breadcrumbs')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Back', exact: true })).toBeVisible();
+    await search.fill('Layout todo 29');
+    await expect(contents).not.toContainText('Layout todo 0');
+    await hideTemporarily.click();
+    await expect(search).toBeHidden();
+    await expect(contents).toContainText('Layout todo 0');
+    await showControls.click();
+    await expect(search).toHaveValue('Layout todo 29');
+    await page.getByRole('button', { name: 'Clear search', exact: true }).click();
 
     await context.setOffline(false);
     await sync(page);
     await page.reload();
-    await expect(page.locator('#contents ~ #navigation')).toBeVisible();
+    await expect(showControls).toBeVisible();
+    await expect(page.locator('#navigation')).toBeHidden();
+    await showControls.click();
     await actions.click();
     await expect(layout).toBeChecked();
-    await page.getByRole('button', { name: 'Move items to next day / list', exact: true }).click();
+    await moveAction.click();
     await page.getByRole('button', { name: 'Create list and move 30 items', exact: true }).click();
     await page.getByRole('button', { name: 'Open list', exact: true }).click();
     const destination = (await localEntity(page, todoIds[0])).parentId;
     await expect(page).toHaveURL(`${url}/#entity/${destination}`);
-    await expect(page.locator('#contents ~ #navigation')).toBeVisible();
+    await expect(showControls).toBeVisible();
+    await expect(page.locator('#navigation')).toBeHidden();
     await sync(page);
 
     const saved = await browser.newPage();
     try {
       await saved.goto(page.url());
-      await expect(saved.locator('#contents ~ #navigation')).toBeVisible();
+      const showSavedControls = saved.getByRole('button', { name: 'Show controls', exact: true });
+      await expect(showSavedControls).toBeVisible();
+      await showSavedControls.click();
       await saved.getByLabel('List actions', { exact: true }).click();
-      await saved.getByRole('checkbox', { name: 'Move controls below the list', exact: true }).uncheck();
-      await expect(saved.locator('#navigation + #contents')).toHaveCount(1);
+      await saved.getByRole('checkbox', { name: 'Hide controls', exact: true }).uncheck();
+      await expect(saved.locator('#navigation')).toBeVisible();
+      await expect(showSavedControls).toHaveCount(0);
+      await expect(saved.getByRole('button', { name: 'Hide controls temporarily', exact: true })).toHaveCount(0);
       await sync(saved);
       await saved.goto(sourceUrl);
-      await expect(saved.locator('#contents ~ #navigation')).toBeVisible();
+      await expect(showSavedControls).toBeVisible();
+      await showSavedControls.click();
       await saved.getByRole('button', { name: 'Back', exact: true }).click();
       await expect(saved).toHaveURL(`${url}/#entity/${folder}`);
-      await expect(saved.locator('#navigation + #contents')).toHaveCount(1);
+      await expect(saved.locator('#navigation')).toBeVisible();
     } finally {
       await saved.close();
     }

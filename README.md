@@ -111,7 +111,7 @@ Inside a list, open **⋯** beside **↶ Undo** and choose **Move items to next 
 
 The move leaves you on the source list with an **Open list** shortcut. One **Undo** returns the moved items and removes the newly created destination from the folder if it is empty.
 
-In the same **⋯** menu, **Move controls below the list** keeps the new-item row at the top while placing the rest of the controls after the items. The navigation row stays reachable at the bottom of the screen. The checkbox syncs per list, and moving items copies its current value to the destination list.
+In the same **⋯** menu, **Hide controls** leaves the new-item row and the list visible. Use the **⋯** icon in the new-item row to show the controls temporarily, then use **×** to hide them again. Leaving or reloading the list ends the temporary reveal. The checkbox syncs per list, and moving items copies its saved value to the destination list.
 
 ## Sync protocol
 

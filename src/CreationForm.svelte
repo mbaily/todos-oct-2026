@@ -6,7 +6,7 @@
   import { acceptOnEnter } from './lib/enter.js';
   import HashtagSuggestions from './HashtagSuggestions.svelte';
 
-  let { parent, completionTags, save, onerror } = $props();
+  let { parent, completionTags, save, onerror, controlsToggle } = $props();
   const allowed = $derived(childTypes[parent?.type ?? 'root']);
   let type = $state(untrack(() => parent?.type === 'list' ? 'todo' : childTypes[parent?.type ?? 'root'][0]));
   let value = $state('');
@@ -104,4 +104,5 @@
   {#if parent?.type === 'folder'}
     <button type="button" class="icon-button" aria-label="Add today's list" title="Add today's list" disabled={saving} onclick={addDatedList}>📅</button>
   {/if}
+  {@render controlsToggle?.()}
 </form>

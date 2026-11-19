@@ -51,6 +51,8 @@
   let activePanelId = $state(null);
   let listActionsOpen = $state(false);
   let listActionsButton = $state();
+  let listControlsButton = $state();
+  let revealedListId = $state(null);
   let savingListLayout = $state(false);
   let moveSourceId = $state(null);
   let moveNotice = $state(null);
@@ -74,10 +76,12 @@
   const showingLocations = $derived(pageKind === 'locations');
   const showingSettings = $derived(pageKind === 'settings');
   const specialView = $derived(showingHashtags || showingTrash || showingNearby || showingLocations || showingSettings);
-  const searching = $derived(search.trim().length > 0);
   const inList = $derived(pageKind === 'entities' && current?.type === 'list');
+  // Keep the stored layout flag and its rollover behavior for existing lists.
+  const hideListControls = $derived(inList && current.controlsBelow === true);
+  const controlsHidden = $derived(hideListControls && revealedListId !== currentId);
+  const searching = $derived(!controlsHidden && search.trim().length > 0);
   const canMoveItems = $derived(inList && !searching);
-  const controlsBelow = $derived(inList && current.controlsBelow === true);
   const moveLists = $derived(moveSourceId
     ? entities.filter(entity => entity.type === 'list' && entity.parentId === current?.parentId)
     : []);
@@ -134,7 +138,13 @@
 
   $effect(() => {
     if (moveSourceId && (!canMoveItems || moveSourceId !== currentId)) moveSourceId = null;
+    if (revealedListId !== null && (!hideListControls || revealedListId !== currentId)) revealedListId = null;
   });
+
+  function toggleListControls() {
+    revealedListId = controlsHidden ? currentId : null;
+    listActionsOpen = false;
+  }
 
   async function changeListLayout(event) {
     const checkbox = event.currentTarget;
@@ -143,12 +153,13 @@
     try {
       await save('list-layout', listId, { controlsBelow: checkbox.checked }, false);
       if (listId === currentId) {
+        revealedListId = null;
         listActionsOpen = false;
         await tick();
-        listActionsButton?.focus();
+        (controlsHidden ? listControlsButton : listActionsButton)?.focus();
       }
     } catch (problem) {
-      checkbox.checked = controlsBelow;
+      checkbox.checked = hideListControls;
       showError(problem);
     } finally { savingListLayout = false; }
   }
@@ -544,118 +555,113 @@
 
 <svelte:window onhashchange={hashChanged} ononline={sync} onfocus={focusChanged} />
 
-{#snippet headers()}
-  <nav id="pinned" aria-label="Pinned items" hidden={!ready || !pinned.length}>
-    {#each pinned as entity (entity.id)}
-      <FavouriteRow {entity} {save} {navigate} pinned={true} todoCount={todoCounts.get(entity.id) ?? 0} onerror={showError} />
-    {/each}
-  </nav>
-  <nav id="favourites" aria-label="Favourites" hidden={!ready || !favourites.length}>
-    {#each favourites as entity (entity.id)}
-      <FavouriteRow {entity} {save} {navigate} todoCount={todoCounts.get(entity.id) ?? 0} onerror={showError} />
-    {/each}
-  </nav>
-  <nav id="breadcrumbs" aria-label="Breadcrumbs" hidden={!ready}>
-    <ServiceWorkerStatus {serverReachable} />
-    <button type="button" class="icon-button" aria-label="Trash" title="View trash" onclick={openTrash}>🗑︎</button>{' '}
-    <button type="button" class="icon-button" aria-label="All hashtags" title="All hashtags" onclick={openHashtags}>#</button>{' '}
-    <button type="button" class="icon-button" aria-label="Nearby errands" title="Nearby errands" onclick={openNearby}>🚗</button>{' '}
-    {#each breadcrumbs as crumb, index}
-      {#snippet crumbLabel()}
-        {#if crumb.icon}<span role="img" aria-label={crumb.label}>{crumb.icon}</span>{:else if crumb.entity}<LinkifiedText text={crumb.label} linkUrls={false} />{:else}{crumb.label}{/if}
-      {/snippet}
-      {#if index > 0}<span aria-hidden="true">{' › '}</span>{/if}
-      {#if index === breadcrumbs.length - 1 && !waitingForLinkedItem}
-        <span aria-current="page">{@render crumbLabel()}<ListTodoCount entity={crumb.entity} count={todoCounts.get(crumb.id) ?? 0} /></span>
-      {:else if crumb.entity}
-        <LinkifiedText text={crumb.label} linkUrls={false} navigationHref={crumb.href} onNavigate={() => navigate(crumb.id)} /><ListTodoCount entity={crumb.entity} count={todoCounts.get(crumb.id) ?? 0} />
-      {:else}
-        <a href={crumb.href} onclick={event => { event.preventDefault(); crumb.kind === 'hashtags' ? openHashtags() : crumb.kind === 'nearby' ? openNearby() : navigate(crumb.id); }}>{@render crumbLabel()}</a><ListTodoCount entity={crumb.entity} count={todoCounts.get(crumb.id) ?? 0} />
-      {/if}
-    {/each}
-  </nav>
-{/snippet}
-
-{#snippet searchControls()}
-  <div>
+<nav id="pinned" aria-label="Pinned items" hidden={controlsHidden || !ready || !pinned.length}>
+  {#each pinned as entity (entity.id)}
+    <FavouriteRow {entity} {save} {navigate} pinned={true} todoCount={todoCounts.get(entity.id) ?? 0} onerror={showError} />
+  {/each}
+</nav>
+<nav id="favourites" aria-label="Favourites" hidden={controlsHidden || !ready || !favourites.length}>
+  {#each favourites as entity (entity.id)}
+    <FavouriteRow {entity} {save} {navigate} todoCount={todoCounts.get(entity.id) ?? 0} onerror={showError} />
+  {/each}
+</nav>
+<nav id="breadcrumbs" aria-label="Breadcrumbs" hidden={controlsHidden || !ready}>
+  <ServiceWorkerStatus {serverReachable} />
+  <button type="button" class="icon-button" aria-label="Trash" title="View trash" onclick={openTrash}>🗑︎</button>{' '}
+  <button type="button" class="icon-button" aria-label="All hashtags" title="All hashtags" onclick={openHashtags}>#</button>{' '}
+  <button type="button" class="icon-button" aria-label="Nearby errands" title="Nearby errands" onclick={openNearby}>🚗</button>{' '}
+  {#each breadcrumbs as crumb, index}
+    {#snippet crumbLabel()}
+      {#if crumb.icon}<span role="img" aria-label={crumb.label}>{crumb.icon}</span>{:else if crumb.entity}<LinkifiedText text={crumb.label} linkUrls={false} />{:else}{crumb.label}{/if}
+    {/snippet}
+    {#if index > 0}<span aria-hidden="true">{' › '}</span>{/if}
+    {#if index === breadcrumbs.length - 1 && !waitingForLinkedItem}
+      <span aria-current="page">{@render crumbLabel()}<ListTodoCount entity={crumb.entity} count={todoCounts.get(crumb.id) ?? 0} /></span>
+    {:else if crumb.entity}
+      <LinkifiedText text={crumb.label} linkUrls={false} navigationHref={crumb.href} onNavigate={() => navigate(crumb.id)} /><ListTodoCount entity={crumb.entity} count={todoCounts.get(crumb.id) ?? 0} />
+    {:else}
+      <a href={crumb.href} onclick={event => { event.preventDefault(); crumb.kind === 'hashtags' ? openHashtags() : crumb.kind === 'nearby' ? openNearby() : navigate(crumb.id); }}>{@render crumbLabel()}</a><ListTodoCount entity={crumb.entity} count={todoCounts.get(crumb.id) ?? 0} />
+    {/if}
+  {/each}
+</nav>
+<div id="controls" hidden={!ready || specialView || waitingForLinkedItem}>
+  <div id="creation">
+    {#if ready && !specialView && (currentId === null || current)}
+      {#key currentId}
+        <CreationForm bind:this={creationForm} parent={current} {completionTags} {save} onerror={showError}>
+          {#snippet controlsToggle()}
+            {#if hideListControls}
+              <button type="button" class="icon-button list-controls-toggle" bind:this={listControlsButton}
+                aria-label={controlsHidden ? 'Show controls' : 'Hide controls temporarily'}
+                title={controlsHidden ? 'Show controls' : 'Hide controls temporarily'}
+                aria-expanded={!controlsHidden} aria-controls="navigation" onclick={toggleListControls}>
+                {controlsHidden ? '⋯' : '×'}
+              </button>
+            {/if}
+          {/snippet}
+        </CreationForm>
+      {/key}
+    {/if}
+  </div>
+  <div hidden={controlsHidden}>
     <label>Search <input id="search" type="search" autocomplete="off" placeholder="Text or #hashtag" bind:value={search} oninput={event => { if (pageKind === 'tag' && !event.currentTarget.value.trim()) clearSearch(); }}></label>
     <button id="clear-search" type="button" onclick={clearSearch}>Clear search</button>
   </div>
-  <div>
+  <div hidden={controlsHidden}>
     <button id="sync" type="button" hidden onclick={syncNow}>Sync now</button>
     <output id="sync-status" aria-live="polite" hidden>{syncStatus}</output>
   </div>
-{/snippet}
-
-{#snippet navigation()}
-  <div id="navigation" class:controls-below={controlsBelow} hidden={!ready || waitingForLinkedItem}>
-    {#if showingSettings}
-      <button type="button" class="icon-button" aria-label="Back" title="Back" onclick={() => openPreviousHash(settingsBackHash)}>←</button>
-    {:else if showingLocations}
-      <button type="button" class="icon-button" aria-label="Back" title="Back" onclick={openNearby}>←</button>
-    {:else if showingNearby}
-      <button type="button" class="icon-button" aria-label="Back" title="Back" onclick={() => openPreviousHash(nearbyBackHash)}>←</button>
-    {:else if showingTrash}
-      <button type="button" class="icon-button" aria-label="Back" title="Back" onclick={backFromTrash}>←</button>
-    {:else if showingHashtags}
-      <button type="button" class="icon-button" aria-label="Back" title="Back" onclick={() => navigate(hashtagBackId)}>←</button>
-    {:else if pageKind === 'tag'}
-      <button type="button" class="icon-button" aria-label="Back" title="Back" onclick={backFromHashtag}>←</button>
-    {:else if searching}
-      <button type="button" class="icon-button" aria-label="Back" title="Back" onclick={() => navigate(currentId)}>←</button>
-    {:else if current}
-      <button type="button" class="icon-button" aria-label="Back" title="Back" onclick={() => navigate(current.parentId)}>←</button>
-    {:else}
-      <button type="button" class="icon-button" aria-label="Back" title="Back" disabled>←</button>
-    {/if}
-    {#if !showingNearby && !showingLocations && !showingSettings}
-      <button type="button" id="sort-order" title="Change sort order" tabindex="-1" disabled={!ready || sorting} onclick={toggleSort}>{activeSort.label}</button>
-    {/if}
-    {#if !specialView || showingNearby}
-      <button type="button" class="icon-button" aria-label="Undo" title={`Undo last ${undoHistory.at(-1)?.action === 'move-items' ? 'move' : 'edit or delete'} (${undoHistory.length} saved step${undoHistory.length === 1 ? '' : 's'} available)`} disabled={undoing || (!undoHistory.length && !pendingDrafts.size)} onclick={undo}>↶</button>
-    {/if}
-    {#if inList}
-      {#key current.id}
-        <details class="list-actions" bind:open={listActionsOpen}>
-          <summary aria-label="List actions" title="List actions" bind:this={listActionsButton}>⋯</summary>
-          <div class="list-actions-panel">
-            <button type="button" onclick={openMoveItems} disabled={!canMoveItems || !items.length}>Move items to next day / list</button>
-            <label>
-              <input type="checkbox" checked={controlsBelow} disabled={savingListLayout} onchange={changeListLayout} />
-              Move controls below the list
-            </label>
-          </div>
-        </details>
-      {/key}
-    {/if}
-    {#if !showingLocations && !showingSettings}<button type="button" id="date-display" title="Change date display" tabindex="-1" disabled={!ready || settingDates} onclick={toggleDateDisplay}>{activeDateDisplay.label}</button>{/if}
-  </div>
-{/snippet}
-
-{#snippet moveConfirmation()}
-  {#if canMoveItems && moveNotice?.sourceId === currentId && entities.some(entity => entity.id === moveNotice.destinationId)}
+</div>
+<div id="navigation" hidden={controlsHidden || !ready || waitingForLinkedItem}>
+  {#if showingSettings}
+    <button type="button" class="icon-button" aria-label="Back" title="Back" onclick={() => openPreviousHash(settingsBackHash)}>←</button>
+  {:else if showingLocations}
+    <button type="button" class="icon-button" aria-label="Back" title="Back" onclick={openNearby}>←</button>
+  {:else if showingNearby}
+    <button type="button" class="icon-button" aria-label="Back" title="Back" onclick={() => openPreviousHash(nearbyBackHash)}>←</button>
+  {:else if showingTrash}
+    <button type="button" class="icon-button" aria-label="Back" title="Back" onclick={backFromTrash}>←</button>
+  {:else if showingHashtags}
+    <button type="button" class="icon-button" aria-label="Back" title="Back" onclick={() => navigate(hashtagBackId)}>←</button>
+  {:else if pageKind === 'tag'}
+    <button type="button" class="icon-button" aria-label="Back" title="Back" onclick={backFromHashtag}>←</button>
+  {:else if searching}
+    <button type="button" class="icon-button" aria-label="Back" title="Back" onclick={() => navigate(currentId)}>←</button>
+  {:else if current}
+    <button type="button" class="icon-button" aria-label="Back" title="Back" onclick={() => navigate(current.parentId)}>←</button>
+  {:else}
+    <button type="button" class="icon-button" aria-label="Back" title="Back" disabled>←</button>
+  {/if}
+  {#if !showingNearby && !showingLocations && !showingSettings}
+    <button type="button" id="sort-order" title="Change sort order" tabindex="-1" disabled={!ready || sorting} onclick={toggleSort}>{activeSort.label}</button>
+  {/if}
+  {#if !specialView || showingNearby}
+    <button type="button" class="icon-button" aria-label="Undo" title={`Undo last ${undoHistory.at(-1)?.action === 'move-items' ? 'move' : 'edit or delete'} (${undoHistory.length} saved step${undoHistory.length === 1 ? '' : 's'} available)`} disabled={undoing || (!undoHistory.length && !pendingDrafts.size)} onclick={undo}>↶</button>
+  {/if}
+  {#if inList}
+    {#key current.id}
+      <details class="list-actions" bind:open={listActionsOpen}>
+        <summary aria-label="List actions" title="List actions" bind:this={listActionsButton}>⋯</summary>
+        <div class="list-actions-panel">
+          <button type="button" onclick={openMoveItems} disabled={!canMoveItems || !items.length}>Move items to next day / list</button>
+          <label>
+            <input type="checkbox" checked={hideListControls} disabled={savingListLayout} onchange={changeListLayout} />
+            Hide controls
+          </label>
+        </div>
+      </details>
+    {/key}
+  {/if}
+  {#if !showingLocations && !showingSettings}<button type="button" id="date-display" title="Change date display" tabindex="-1" disabled={!ready || settingDates} onclick={toggleDateDisplay}>{activeDateDisplay.label}</button>{/if}
+</div>
+<main id="contents" aria-label={showingTrash ? 'Trash' : showingHashtags ? 'Hashtags' : showingNearby ? 'Nearby errands' : showingLocations ? 'Edit locations' : showingSettings ? 'Settings' : 'Items'} hidden={!ready}>
+  {#if !controlsHidden && canMoveItems && moveNotice?.sourceId === currentId && entities.some(entity => entity.id === moveNotice.destinationId)}
     <aside class="pill-row">
       <output>Moved {moveNotice.count} {moveNotice.count === 1 ? 'item' : 'items'} to “{moveNotice.name}”.</output>
       <button type="button" onclick={openMoveDestination}>Open list</button>
       <button type="button" class="icon-button" aria-label="Dismiss move confirmation" onclick={() => moveNotice = null}>×</button>
     </aside>
   {/if}
-{/snippet}
-
-{#if !controlsBelow}{@render headers()}{/if}
-<div id="controls" hidden={!ready || specialView || waitingForLinkedItem}>
-  <div id="creation">
-    {#if ready && !specialView && (currentId === null || current)}
-      {#key currentId}
-        <CreationForm bind:this={creationForm} parent={current} {completionTags} {save} onerror={showError} />
-      {/key}
-    {/if}
-  </div>
-  {#if !controlsBelow}{@render searchControls()}{/if}
-</div>
-{#if !controlsBelow}{@render navigation()}{/if}
-<main id="contents" aria-label={showingTrash ? 'Trash' : showingHashtags ? 'Hashtags' : showingNearby ? 'Nearby errands' : showingLocations ? 'Edit locations' : showingSettings ? 'Settings' : 'Items'} hidden={!ready}>
-  {#if !controlsBelow}{@render moveConfirmation()}{/if}
   {#if waitingForLinkedItem}
     <p role="status">Waiting to sync the linked item…</p>
   {:else if showingSettings}
@@ -692,12 +698,6 @@
     {/key}
   {/if}
 </main>
-{#if controlsBelow}
-  {@render headers()}
-  {@render searchControls()}
-  {@render moveConfirmation()}
-  {@render navigation()}
-{/if}
 {#if canMoveItems && moveSourceId === currentId}
   <MoveItemsDialog source={current} {items} lists={moveLists} onmove={moveItems} onclose={closeMoveItems} />
 {/if}
@@ -709,12 +709,6 @@
 
 <style>
   #navigation { position: relative; }
-  #navigation.controls-below {
-    position: sticky;
-    bottom: 0;
-    z-index: 1;
-    background: var(--page-background);
-  }
   .list-actions { display: inline-block; position: relative; vertical-align: middle; }
   .list-actions summary {
     display: grid;
@@ -737,8 +731,10 @@
     background: var(--page-background);
     border: 1px solid #555;
   }
-  .controls-below .list-actions-panel { inset-block-start: auto; inset-block-end: 100%; }
-  .list-actions-panel button, .list-actions-panel label { padding: 0.35rem; }
+  .list-actions-panel button, .list-actions-panel label {
+    padding: 0.35rem;
+    font-size: 0.7rem;
+  }
   .list-actions-panel label { display: flex; align-items: center; gap: 0.25rem; cursor: pointer; }
   @media (max-width: 640px) {
     .list-actions { position: static; }
@@ -749,6 +745,6 @@
     }
   }
   @media (pointer: coarse) {
-    .list-actions summary { width: 48px; height: 48px; font-size: 1.5rem; }
+    .list-actions summary, .list-controls-toggle { width: 48px; height: 48px; font-size: 1.5rem; }
   }
 </style>
